@@ -1,0 +1,16 @@
+{
+  "name": "@fcastrovilli/doom-scroller",
+  "license": "MIT",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "lint": "tsc"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.0.0"
+  }
+}
