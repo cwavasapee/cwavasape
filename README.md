@@ -112,11 +112,103 @@ This will start the Turborepo development environment with hot reloading for bot
 
 Main class for scroll detection and state management.
 
-[Rest of the API documentation remains the same...]
+#### Constructor Options
+
+```typescript
+interface DoomScrollerOptions {
+  /** Multiplier for scroll speed. Default: 1 */
+  speedMultiplier?: number;
+  /** Number of samples to keep for smoothing. Default: 5 */
+  sampleSize?: number;
+  /** Minimum velocity to register as movement. Default: 0.1 */
+  minVelocity?: number;
+  /** Threshold for direction change detection. Default: 0.15 */
+  directionThreshold?: number;
+  /** Factor for smoothing scroll movements. Default: 0.3 */
+  smoothingFactor?: number;
+  /** Time in ms to wait before considering scroll ended. Default: 150 */
+  debounceTime?: number;
+}
+```
+
+#### Methods
+
+- `init()`: Initialize scroll detection
+- `destroy()`: Cleanup resources and event listeners
+- `subscribe(callback: (state: ScrollState) => void): () => void`: Subscribe to scroll state updates
+
+#### Scroll State Interface
+
+```typescript
+interface ScrollState {
+  /** Whether scrolling is currently active */
+  isScrolling: boolean;
+  /** Current velocity in pixels per millisecond */
+  velocity: {
+    x: number;
+    y: number;
+  };
+  /** Current scroll direction state */
+  direction: {
+    x: "left" | "right" | "none";
+    y: "up" | "down" | "none";
+  };
+  /** Change in scroll position since last update */
+  delta: {
+    x: number;
+    y: number;
+  };
+  /** Raw scroll values from the wheel event */
+  rawScroll: {
+    x: number;
+    y: number;
+  };
+}
+```
 
 ## Advanced Usage
 
-[Advanced usage examples remain the same...]
+### Smooth Scrolling Animation
+
+```typescript
+const scroller = new DoomScroller({
+  smoothingFactor: 0.1, // Very smooth
+  speedMultiplier: 1.2,
+});
+
+scroller.init();
+
+let translateY = 0;
+const content = document.querySelector(".content");
+
+scroller.subscribe((state) => {
+  if (!state.isScrolling) return;
+
+  // Apply smooth transform based on velocity
+  translateY += state.velocity.y * 16; // 16ms frame time
+  content?.style.transform = `translateY(${translateY}px)`;
+});
+```
+
+### Directional UI Updates
+
+```typescript
+const scroller = new DoomScroller({
+  directionThreshold: 0.1, // Responsive to direction changes
+});
+
+scroller.init();
+
+const header = document.querySelector(".header");
+
+scroller.subscribe((state) => {
+  if (state.direction.y === "up") {
+    header?.classList.remove("header--hidden");
+  } else if (state.direction.y === "down" && state.velocity.y > 0.5) {
+    header?.classList.add("header--hidden");
+  }
+});
+```
 
 ## Contributing
 
