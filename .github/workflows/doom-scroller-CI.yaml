@@ -5,8 +5,7 @@ on:
       - "**"
     paths:
       - "packages/doom-scroller/**"
-      - ".github/workflows/doom-scroller-CI.yml"
-      - ".github/workflows/doom-scroller-ci.yml"
+      - ".github/workflows/*doom-scroller*.yml"
 
 jobs:
   test-and-build:
