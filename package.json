@@ -7,7 +7,7 @@
     "test": "turbo test",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "release": "pnpm run build && changeset publish",
+    "release": "pnpm run build --filter=@cwavasape/doom-scroller && changeset publish",
     "version-packages": "changeset version",
     "changeset": "changeset"
   },
