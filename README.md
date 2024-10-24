@@ -78,7 +78,7 @@ If you're working on the CWAVASAPE project locally and want to develop or modify
 ### Clone the repository
 
 ```bash
-git clone https://github.com/your-username/cwavasape.git
+git clone https://github.com/fcastrovilli/cwavasape.git
 cd cwavasape
 ```
 
