@@ -1,5 +1,5 @@
 ---
-"@cwavasape/doom-scroller": major
+"@cwavasape/doom-scroller": patch
 ---
 
 # Doom Scroller
@@ -28,14 +28,14 @@ First release of the DoomScroller library, providing advanced scroll detection a
 
 ```typescript
 const scroller = new DoomScroller({
-  smoothingFactor: 0.2,    // Controls smoothness
-  speedMultiplier: 1.5,    // Adjusts sensitivity
-  directionThreshold: 0.1  // Direction change sensitivity
+  smoothingFactor: 0.2, // Controls smoothness
+  speedMultiplier: 1.5, // Adjusts sensitivity
+  directionThreshold: 0.1, // Direction change sensitivity
 });
 
-scroller.subscribe(state => {
-  console.log('Direction:', state.direction);
-  console.log('Velocity:', state.velocity);
+scroller.subscribe((state) => {
+  console.log("Direction:", state.direction);
+  console.log("Velocity:", state.velocity);
 });
 
 // Cleanup when done
