@@ -2,122 +2,235 @@ import type { DoomScrollerOptions, ScrollState, DirectionState } from "./types";
 import { DirectionDetector } from "./direction-detector";
 
 /**
- * DoomScroller main class that handles scroll detection and state management
+ * Smooth scroll detection and velocity tracking for advanced scroll-based interactions.
+ *
+ * The DoomScroller class provides a framework for handling scroll events with:
+ * - Immediate direction detection
+ * - Smooth velocity tracking
+ * - Delta normalization
+ * - Configurable sensitivity and smoothing
+ *
  * @example
  * ```typescript
- * const scroller = new DoomScroller({
- *   speedMultiplier: 1.2,
- *   directionThreshold: 0.2
+ * // Basic usage
+ * const scroller = new DoomScroller();
+ * scroller.init();
+ *
+ * scroller.subscribe(state => {
+ *   console.log('Scroll direction:', state.direction);
+ *   console.log('Scroll velocity:', state.velocity);
  * });
  *
- * scroller.subscribe((state) => {
- *   console.log('Direction:', state.direction);
- *   console.log('Velocity:', state.velocity);
+ * // Cleanup when done
+ * scroller.destroy();
+ *
+ * // With custom options
+ * const customScroller = new DoomScroller({
+ *   smoothingFactor: 0.2,    // Lower = smoother but more latency
+ *   speedMultiplier: 1.5,    // Higher = more sensitive
+ *   directionThreshold: 0.1  // Lower = more responsive to direction changes
  * });
  * ```
  */
 export class DoomScroller {
-  private options: Required<DoomScrollerOptions>;
-  private scrollState: ScrollState;
-  private rafId: number | null = null;
-  private listeners: Set<(state: ScrollState) => void> = new Set();
-  private directionDetector: DirectionDetector;
-  private scrollEndTimeout: number | null = null;
-  private scrollBuffer: Array<{ x: number; y: number; timestamp: number }> = [];
-  private readonly bufferSize = 5;
-  private lastTimestamp: number = 0;
+  /**
+   * Default configuration options for the DoomScroller instance.
+   * @internal
+   */
+  private static readonly DEFAULT_OPTIONS: Required<DoomScrollerOptions> = {
+    /** Base scroll speed multiplier */
+    speedMultiplier: 1,
+    /** Number of samples to keep for calculations */
+    sampleSize: 5,
+    /** Minimum velocity to register movement */
+    minVelocity: 0.1,
+    /** Threshold for direction changes */
+    directionThreshold: 0.15,
+    /** Smoothing factor (0-1, lower = smoother) */
+    smoothingFactor: 0.2,
+    /** Time in ms to wait before ending scroll */
+    debounceTime: 150,
+  };
+
+  private readonly options: Required<DoomScrollerOptions>;
+  private readonly directionDetector: DirectionDetector;
+  private readonly subscribers: Set<(state: ScrollState) => void>;
+
+  private animationFrame: number | null;
+  private scrollTimeout: number | null;
+  private lastEventTime: number;
+  private initialized: boolean;
+
+  // Smooth value tracking
+  private smoothDelta: { x: number; y: number };
+  private smoothVelocity: { x: number; y: number };
+  private previousDelta: { x: number; y: number };
+
+  // Immediate direction tracking
+  private lastRawDelta: { x: number; y: number };
+  private lastDirection: DirectionState;
+
+  // Current state
+  private state: ScrollState;
 
   /**
-   * Creates a new DoomScroller instance
-   * @param options - Configuration options for the scroller
+   * Creates a new DoomScroller instance.
+   * Note: Call {@link init} after creating the instance to start scroll detection.
+   *
+   * @param options - Configuration options for customizing scroll behavior
    */
-  constructor(options: DoomScrollerOptions = {}) {
-    this.options = {
-      speedMultiplier: options.speedMultiplier ?? 1,
-      sampleSize: options.sampleSize ?? 5,
-      minVelocity: options.minVelocity ?? 0.1,
-      directionThreshold: options.directionThreshold ?? 0.15,
-      smoothingFactor: options.smoothingFactor ?? 0.3,
-      debounceTime: options.debounceTime ?? 150,
-    };
-
+  constructor(options: Partial<DoomScrollerOptions> = {}) {
+    this.options = { ...DoomScroller.DEFAULT_OPTIONS, ...options };
     this.directionDetector = new DirectionDetector(
       this.options.directionThreshold,
       this.options.smoothingFactor
     );
 
-    this.scrollState = {
+    // Initialize instance variables
+    this.subscribers = new Set();
+    this.animationFrame = null;
+    this.scrollTimeout = null;
+    this.lastEventTime = 0;
+    this.initialized = false;
+
+    // Initialize tracking values
+    this.smoothDelta = { x: 0, y: 0 };
+    this.smoothVelocity = { x: 0, y: 0 };
+    this.previousDelta = { x: 0, y: 0 };
+    this.lastRawDelta = { x: 0, y: 0 };
+    this.lastDirection = { x: "none", y: "none" };
+
+    // Initialize state
+    this.state = {
       isScrolling: false,
       velocity: { x: 0, y: 0 },
       direction: { x: "none", y: "none" },
       delta: { x: 0, y: 0 },
       rawScroll: { x: 0, y: 0 },
     };
-
-    this.init();
   }
 
   /**
-   * Initializes event listeners
+   * Checks if the current environment is a browser with required features
    * @internal
    */
-  private init(): void {
-    window.addEventListener("wheel", this.handleWheel, { passive: false });
+  private isBrowserEnvironment(): boolean {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.addEventListener === "function" &&
+      typeof window.removeEventListener === "function" &&
+      typeof window.requestAnimationFrame === "function" &&
+      typeof performance?.now === "function"
+    );
   }
 
   /**
-   * Adds a new delta measurement to the smoothing buffer
-   * @internal
+   * Initializes the scroll detection system.
+   * Must be called after construction and in a browser environment.
+   *
+   * @throws {Error} If called in a non-browser environment or already initialized
    */
-  private addToBuffer(
-    delta: { x: number; y: number },
-    timestamp: number
-  ): void {
-    this.scrollBuffer.push({ ...delta, timestamp });
-    if (this.scrollBuffer.length > this.bufferSize) {
-      this.scrollBuffer.shift();
+  public init(): void {
+    if (!this.isBrowserEnvironment()) {
+      throw new Error(
+        "DoomScroller requires a browser environment with DOM support"
+      );
+    }
+
+    if (this.initialized) {
+      throw new Error("DoomScroller is already initialized");
+    }
+
+    try {
+      window.addEventListener("wheel", this.handleWheel, { passive: false });
+      this.initialized = true;
+    } catch (error) {
+      throw new Error(
+        "Failed to initialize DoomScroller: " + (error as Error).message
+      );
     }
   }
 
   /**
-   * Calculates smoothed delta values from the buffer
+   * Updates direction based on raw input for immediate feedback
    * @internal
    */
-  private calculateSmoothedDelta(): { x: number; y: number } {
-    if (this.scrollBuffer.length === 0) return { x: 0, y: 0 };
-
-    let totalWeight = 0;
-    const smoothedDelta = this.scrollBuffer.reduce(
-      (acc, curr, index) => {
-        const weight = index + 1;
-        totalWeight += weight;
-        return {
-          x: acc.x + curr.x * weight,
-          y: acc.y + curr.y * weight,
-        };
-      },
-      { x: 0, y: 0 }
-    );
+  private getImmediateDirection(rawDelta: {
+    x: number;
+    y: number;
+  }): DirectionState {
+    const threshold = this.options.directionThreshold;
 
     return {
-      x: smoothedDelta.x / totalWeight,
-      y: smoothedDelta.y / totalWeight,
+      x:
+        Math.abs(rawDelta.x) < threshold
+          ? this.lastDirection.x
+          : rawDelta.x > 0
+            ? "right"
+            : "left",
+      y:
+        Math.abs(rawDelta.y) < threshold
+          ? this.lastDirection.y
+          : rawDelta.y > 0
+            ? "down"
+            : "up",
     };
   }
 
   /**
-   * Normalizes wheel event delta values across different browsers
+   * Processes immediate movement updates before smoothing
    * @internal
    */
-  private normalizeWheelDelta(e: WheelEvent): { x: number; y: number } {
-    let { deltaX, deltaY } = e;
+  private processImmediateUpdate(rawDelta: { x: number; y: number }): void {
+    const newDirection = this.getImmediateDirection(rawDelta);
 
-    switch (e.deltaMode) {
-      case 1: // DOM_DELTA_LINE
+    if (
+      Math.abs(rawDelta.x) > this.options.directionThreshold ||
+      Math.abs(rawDelta.y) > this.options.directionThreshold
+    ) {
+      this.state.direction = newDirection;
+      this.lastDirection = newDirection;
+    }
+  }
+
+  /**
+   * Applies exponential smoothing to a single value
+   * @internal
+   */
+  private smooth(current: number, previous: number): number {
+    return (
+      this.options.smoothingFactor * current +
+      (1 - this.options.smoothingFactor) * previous
+    );
+  }
+
+  /**
+   * Applies smoothing to a 2D vector
+   * @internal
+   */
+  private smoothVector(
+    current: { x: number; y: number },
+    previous: { x: number; y: number }
+  ): { x: number; y: number } {
+    return {
+      x: this.smooth(current.x, previous.x),
+      y: this.smooth(current.y, previous.y),
+    };
+  }
+
+  /**
+   * Normalizes wheel event delta values across different browsers and input methods
+   * @internal
+   */
+  private normalizeWheelDelta(event: WheelEvent): { x: number; y: number } {
+    let { deltaX, deltaY } = event;
+
+    switch (event.deltaMode) {
+      case 1: // LINE mode
         deltaX *= 16;
         deltaY *= 16;
         break;
-      case 2: // DOM_DELTA_PAGE
+      case 2: // PAGE mode
         deltaX *= 100;
         deltaY *= 100;
         break;
@@ -130,133 +243,180 @@ export class DoomScroller {
   }
 
   /**
-   * Handles wheel events and updates scroll state
+   * Handles wheel events and initiates scroll state updates
    * @internal
    */
-  private handleWheel = (e: WheelEvent): void => {
-    e.preventDefault();
+  private handleWheel = (event: WheelEvent): void => {
+    event.preventDefault();
 
-    const normalizedDelta = this.normalizeWheelDelta(e);
-    const timestamp = Date.now();
+    const rawDelta = this.normalizeWheelDelta(event);
+    const timestamp = performance.now();
 
-    this.addToBuffer(normalizedDelta, timestamp);
-    this.scrollState.rawScroll = normalizedDelta;
+    // Handle immediate direction update
+    this.processImmediateUpdate(rawDelta);
 
-    if (!this.scrollState.isScrolling) {
-      this.scrollState.isScrolling = true;
+    // Store raw values
+    this.state.rawScroll = rawDelta;
+    this.lastRawDelta = rawDelta;
+
+    // Apply smoothing to delta for velocity calculations
+    this.smoothDelta = this.smoothVector(rawDelta, this.previousDelta);
+    this.previousDelta = this.smoothDelta;
+
+    if (!this.state.isScrolling) {
+      this.state.isScrolling = true;
+      this.lastEventTime = timestamp;
       this.startAnimation();
     }
 
-    this.handleScrollEnd();
+    // Notify subscribers immediately for direction changes
+    this.notifySubscribers();
+    this.scheduleScrollEnd();
   };
 
   /**
-   * Handles scroll end detection and cleanup
+   * Schedules the end of scroll detection after inactivity
    * @internal
    */
-  private handleScrollEnd = (): void => {
-    if (this.scrollEndTimeout) {
-      window.clearTimeout(this.scrollEndTimeout);
+  private scheduleScrollEnd(): void {
+    if (!this.isBrowserEnvironment()) return;
+
+    if (this.scrollTimeout) {
+      window.clearTimeout(this.scrollTimeout);
     }
 
-    this.scrollEndTimeout = window.setTimeout(() => {
-      this.scrollState.isScrolling = false;
-      this.directionDetector.reset();
-      this.scrollBuffer = [];
+    this.scrollTimeout = window.setTimeout(
+      () => this.endScroll(),
+      this.options.debounceTime
+    );
+  }
 
-      if (this.rafId) {
-        cancelAnimationFrame(this.rafId);
-        this.rafId = null;
-      }
+  /**
+   * Handles cleanup when scrolling ends
+   * @internal
+   */
+  private endScroll(): void {
+    this.state.isScrolling = false;
+    this.directionDetector.reset();
 
-      this.scrollState.delta = { x: 0, y: 0 };
-      this.scrollState.velocity = { x: 0, y: 0 };
-      this.scrollState.direction = { x: "none", y: "none" };
-      this.notifyListeners();
-    }, this.options.debounceTime) as unknown as number;
-  };
+    // Reset smooth values
+    this.smoothDelta = { x: 0, y: 0 };
+    this.smoothVelocity = { x: 0, y: 0 };
+    this.previousDelta = { x: 0, y: 0 };
+
+    // Reset immediate tracking
+    this.lastRawDelta = { x: 0, y: 0 };
+    this.lastDirection = { x: "none", y: "none" };
+
+    if (this.animationFrame !== null && this.isBrowserEnvironment()) {
+      window.cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = null;
+    }
+
+    // Reset state
+    this.state.delta = { x: 0, y: 0 };
+    this.state.velocity = { x: 0, y: 0 };
+    this.state.direction = { x: "none", y: "none" };
+    this.state.rawScroll = { x: 0, y: 0 };
+
+    this.notifySubscribers();
+  }
 
   /**
    * Starts the animation loop for continuous state updates
    * @internal
    */
   private startAnimation(): void {
+    if (!this.isBrowserEnvironment()) return;
+
     const animate = (): void => {
-      this.updateScrollState();
-      this.notifyListeners();
-      this.rafId = requestAnimationFrame(animate);
+      if (!this.state.isScrolling) return;
+
+      this.updateState();
+      this.notifySubscribers();
+
+      if (this.isBrowserEnvironment()) {
+        this.animationFrame = window.requestAnimationFrame(animate);
+      }
     };
-    this.rafId = requestAnimationFrame(animate);
+
+    this.animationFrame = window.requestAnimationFrame(animate);
   }
 
   /**
-   * Updates the scroll state with latest measurements
+   * Updates the current scroll state with latest calculations
    * @internal
    */
-  private updateScrollState(): void {
-    const smoothedDelta = this.calculateSmoothedDelta();
-    this.scrollState.delta = smoothedDelta;
+  private updateState(): void {
+    this.state.delta = this.smoothDelta;
 
-    const currentTime = Date.now();
-    const timeDelta = currentTime - this.lastTimestamp;
-    this.lastTimestamp = currentTime;
+    const now = performance.now();
+    const timeDelta = now - this.lastEventTime;
+    this.lastEventTime = now;
 
     if (timeDelta > 0) {
-      this.scrollState.velocity = {
-        x: smoothedDelta.x / timeDelta,
-        y: smoothedDelta.y / timeDelta,
+      const instantVelocity = {
+        x: this.smoothDelta.x / timeDelta,
+        y: this.smoothDelta.y / timeDelta,
       };
+
+      this.smoothVelocity = this.smoothVector(
+        instantVelocity,
+        this.smoothVelocity
+      );
+      this.state.velocity = this.smoothVelocity;
     }
-
-    this.scrollState.direction =
-      this.directionDetector.detectDirection(smoothedDelta);
   }
 
   /**
-   * Subscribes to scroll state updates
-   * @param callback - Function to be called with updated scroll state
-   * @returns Function to unsubscribe
-   *
-   * @example
-   * ```typescript
-   * const unsubscribe = scroller.subscribe((state) => {
-   *   if (state.direction.y === 'down') {
-   *     // Handle downward scroll
-   *   }
-   * });
-   *
-   * // Later: cleanup
-   * unsubscribe();
-   * ```
-   */
-  public subscribe(callback: (state: ScrollState) => void): () => void {
-    this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
-  }
-
-  /**
-   * Notifies all subscribers of state changes
+   * Notifies all subscribers of the current state
    * @internal
    */
-  private notifyListeners(): void {
-    this.listeners.forEach((callback) => callback({ ...this.scrollState }));
+  private notifySubscribers(): void {
+    const stateCopy: ScrollState = { ...this.state };
+    for (const subscriber of this.subscribers) {
+      subscriber(stateCopy);
+    }
   }
 
   /**
-   * Cleans up all resources and event listeners
-   * Should be called when the scroller is no longer needed
+   * Subscribes to scroll state updates.
+   * The callback will be invoked with the current scroll state whenever it changes.
+   *
+   * @param callback - Function to be called with scroll state updates
+   * @returns Function to remove the subscription
+   */
+  public subscribe(callback: (state: ScrollState) => void): () => void {
+    this.subscribers.add(callback);
+    return () => this.subscribers.delete(callback);
+  }
+
+  /**
+   * Cleans up all resources and event listeners.
+   * Should be called when the scroller is no longer needed.
    */
   public destroy(): void {
-    window.removeEventListener("wheel", this.handleWheel);
+    if (!this.initialized) return;
 
-    if (this.rafId) {
-      cancelAnimationFrame(this.rafId);
+    if (this.isBrowserEnvironment()) {
+      try {
+        window.removeEventListener("wheel", this.handleWheel);
+
+        if (this.animationFrame !== null) {
+          window.cancelAnimationFrame(this.animationFrame);
+          this.animationFrame = null;
+        }
+
+        if (this.scrollTimeout !== null) {
+          window.clearTimeout(this.scrollTimeout);
+          this.scrollTimeout = null;
+        }
+      } catch (error) {
+        console.warn("Error during DoomScroller cleanup:", error);
+      }
     }
 
-    if (this.scrollEndTimeout) {
-      window.clearTimeout(this.scrollEndTimeout);
-    }
-
-    this.listeners.clear();
+    this.subscribers.clear();
+    this.initialized = false;
   }
 }

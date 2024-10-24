@@ -13,6 +13,10 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "test": {
+      "cache": true,
+      "persistent": true
     }
   }
 }
