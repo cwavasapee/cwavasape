@@ -1,3 +1,3 @@
 # CWAVASAPE
 
-See the `doom-scroller` package `README.md` file for more info about this.
+See [README](https://github.com/cwavasapee/cwavasape/blob/main/packages/doom-scroller/README.md) for more info about this repository.
