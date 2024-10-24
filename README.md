@@ -1,81 +1,137 @@
-# Turborepo starter
+# DOOM SCROLLER
 
-This is an official starter Turborepo.
+A high-performance, smooth scroll detection library for advanced scroll-based interactions. Part of the CWAVASAPE project.
 
-## Using this example
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Turborepo](https://img.shields.io/badge/Turborepo-EF4444?style=flat-square&logo=turborepo&logoColor=white)](https://turbo.build/)
+[![npm version](https://img.shields.io/npm/v/@cwavasape/doom-scroller.svg?style=flat-square)](https://www.npmjs.com/package/@cwavasape/doom-scroller)
+[![npm downloads](https://img.shields.io/npm/dm/@cwavasape/doom-scroller.svg?style=flat-square)](https://www.npmjs.com/package/@cwavasape/doom-scroller)
 
-Run the following command:
+## Features
 
-```sh
-npx create-turbo@latest
+- 🎯 Precise scroll direction detection
+- 📊 Real-time velocity tracking
+- 🔄 Smooth scroll delta normalization
+- ⚡ High-performance animation frame updates
+- 🎛️ Configurable sensitivity and smoothing
+- 📱 Cross-browser wheel event normalization
+- 💪 Fully typed TypeScript API
+
+## Installation
+
+Install the package using your preferred package manager:
+
+```bash
+# Using npm
+npm install @cwavasape/doom-scroller
+
+# Using yarn
+yarn add @cwavasape/doom-scroller
+
+# Using pnpm
+pnpm add @cwavasape/doom-scroller
 ```
 
-## What's inside?
+Add it to your dependencies:
 
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-pnpm build
+```json
+{
+  "dependencies": {
+    "@cwavasape/doom-scroller": "latest"
+  }
+}
 ```
 
-### Develop
+## Quick Start
 
-To develop all apps and packages, run the following command:
+```typescript
+import { DoomScroller } from "@cwavasape/doom-scroller";
 
+// Create a new instance
+const scroller = new DoomScroller({
+  smoothingFactor: 0.2, // Lower = smoother but more latency
+  speedMultiplier: 1.5, // Higher = more sensitive
+  directionThreshold: 0.1, // Lower = more responsive to direction changes
+});
+
+// Initialize scroll detection
+scroller.init();
+
+// Subscribe to scroll state updates
+const unsubscribe = scroller.subscribe((state) => {
+  console.log("Scroll direction:", state.direction);
+  console.log("Scroll velocity:", state.velocity);
+
+  if (state.direction.y === "down") {
+    // Handle downward scroll
+  }
+});
+
+// Cleanup when done
+scroller.destroy();
 ```
-cd my-turborepo
+
+## Development
+
+If you're working on the CWAVASAPE project locally and want to develop or modify the DOOM SCROLLER package:
+
+### Clone the repository
+
+```bash
+git clone https://github.com/your-username/cwavasape.git
+cd cwavasape
+```
+
+### Install dependencies
+
+```bash
+pnpm install
+```
+
+### Link the package locally in your `package.json`
+
+```json
+{
+  "dependencies": {
+    "@cwavasape/doom-scroller": "workspace:*"
+  }
+}
+```
+
+### Run the development environment
+
+```bash
 pnpm dev
 ```
 
-### Remote Caching
+This will start the Turborepo development environment with hot reloading for both the package and any apps consuming it.
 
-Turborepo can use a technique known as [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+## API Reference
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup), then enter the following commands:
+### `DoomScroller`
 
-```
-cd my-turborepo
-npx turbo login
-```
+Main class for scroll detection and state management.
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+[Rest of the API documentation remains the same...]
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+## Advanced Usage
 
-```
-npx turbo link
-```
+[Advanced usage examples remain the same...]
 
-## Useful Links
+## Contributing
 
-Learn more about the power of Turborepo:
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-- [Tasks](https://turbo.build/repo/docs/core-concepts/monorepos/running-tasks)
-- [Caching](https://turbo.build/repo/docs/core-concepts/caching)
-- [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching)
-- [Filtering](https://turbo.build/repo/docs/core-concepts/monorepos/filtering)
-- [Configuration Options](https://turbo.build/repo/docs/reference/configuration)
-- [CLI Usage](https://turbo.build/repo/docs/reference/command-line-reference)
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Related Packages
+
+Other packages in the CWAVASAPE project:
+
+- `@cwavasape/web` - Main web application built with SvelteKit 5

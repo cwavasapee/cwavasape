@@ -18,7 +18,7 @@
 	}
 
 	import { onMount, onDestroy } from 'svelte';
-	import { DoomScroller, type ScrollState } from '@fcastrovilli/doom-scroller';
+	import { DoomScroller, type ScrollState } from '@cwavasape/doom-scroller';
 
 	let {
 		config = {

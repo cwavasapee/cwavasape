@@ -14,7 +14,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@fcastrovilli/doom-scroller':
+      '@cwavasape/doom-scroller':
         specifier: workspace:*
         version: link:../../packages/doom-scroller
       better-sqlite3:
