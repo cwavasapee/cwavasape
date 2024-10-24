@@ -5,6 +5,7 @@ on:
       - "**"
     paths:
       - "packages/doom-scroller/**"
+      - ".changeset/**"
 
 jobs:
   test-and-build:
