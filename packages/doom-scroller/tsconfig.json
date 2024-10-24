@@ -8,15 +8,20 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
+
     /* Strictness */
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    /* If NOT transpiling with TypeScript: */
+
+    /* Module Resolution */
     "moduleResolution": "Bundler",
     "module": "ESNext",
     "noEmit": true,
-    /* If your code runs in the DOM: */
+
+    /* DOM and Types */
     "lib": ["es2022", "dom", "dom.iterable"],
     "types": ["vitest/globals"]
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
