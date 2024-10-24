@@ -42,6 +42,7 @@ jobs:
 
       - name: Create Release Pull Request or Publish
         id: changesets
+        working-directory: .
         uses: changesets/action@v1
         with:
           publish: pnpm run release
