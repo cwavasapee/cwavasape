@@ -1,390 +1,128 @@
-import type { DoomScrollerOptions, ScrollState, DirectionState } from "./types";
-import { DirectionDetector } from "./direction-detector";
+/**
+ * @file Core DoomScroller implementation
+ */
+
+import type {
+  DoomScrollerOptions,
+  ScrollState,
+  MovementConfig,
+  MomentumConfig,
+  MovementState,
+  Vector2D,
+  TouchTrackingState,
+} from "./types";
+
+import { DirectionDetector } from "./core/direction-detector";
+import { InputHandler } from "./core/input-handlers";
+import { MovementProcessor } from "./core/movement-processor";
+import { MomentumHandler } from "./core/momentum-handler";
+
+/** Default movement configuration */
+const DEFAULT_MOVEMENT_CONFIG: Required<MovementConfig> = {
+  speedMultiplier: 1,
+  smoothingFactor: 0.2,
+  directionThreshold: 0.15,
+  minVelocity: 0.1,
+  maxVelocity: 50,
+  sampleSize: 5,
+  invertX: false,
+  invertY: false,
+};
+
+/** Default momentum configuration */
+const DEFAULT_MOMENTUM_CONFIG: Required<MomentumConfig> = {
+  enabled: true,
+  duration: 1000,
+  friction: 0.95,
+  minVelocity: 0.1,
+  minTouchDuration: 100,
+};
 
 /**
- * Smooth scroll detection and velocity tracking for advanced scroll-based interactions.
- *
- * The DoomScroller class provides a framework for handling scroll events with:
- * - Immediate direction detection
- * - Smooth velocity tracking
- * - Delta normalization
- * - Configurable sensitivity and smoothing
- *
- * @example
- * ```typescript
- * // Basic usage
- * const scroller = new DoomScroller();
- * scroller.init();
- *
- * scroller.subscribe(state => {
- *   console.log('Scroll direction:', state.direction);
- *   console.log('Scroll velocity:', state.velocity);
- * });
- *
- * // Cleanup when done
- * scroller.destroy();
- *
- * // With custom options
- * const customScroller = new DoomScroller({
- *   smoothingFactor: 0.2,    // Lower = smoother but more latency
- *   speedMultiplier: 1.5,    // Higher = more sensitive
- *   directionThreshold: 0.1  // Lower = more responsive to direction changes
- * });
- * ```
+ * Main DoomScroller class for handling scroll interactions
  */
 export class DoomScroller {
-  /**
-   * Default configuration options for the DoomScroller instance.
-   * @internal
-   */
-  private static readonly DEFAULT_OPTIONS: Required<DoomScrollerOptions> = {
-    /** Base scroll speed multiplier */
-    speedMultiplier: 1,
-    /** Number of samples to keep for calculations */
-    sampleSize: 5,
-    /** Minimum velocity to register movement */
-    minVelocity: 0.1,
-    /** Threshold for direction changes */
-    directionThreshold: 0.15,
-    /** Smoothing factor (0-1, lower = smoother) */
-    smoothingFactor: 0.2,
-    /** Time in ms to wait before ending scroll */
-    debounceTime: 150,
+  private readonly config: {
+    debounceTime: number;
+    wheel: Required<MovementConfig>;
+    touch: Required<MovementConfig & MomentumConfig>;
   };
 
-  private readonly options: Required<DoomScrollerOptions>;
   private readonly directionDetector: DirectionDetector;
-  private readonly subscribers: Set<(state: ScrollState) => void>;
+  private readonly momentumHandler: MomentumHandler;
+  private readonly subscribers = new Set<(state: ScrollState) => void>();
 
-  private animationFrame: number | null;
-  private scrollTimeout: number | null;
-  private lastEventTime: number;
-  private initialized: boolean;
+  private wheelState: MovementState;
+  private touchState: MovementState;
+  private touchTracking: TouchTrackingState = {
+    isActive: false,
+    activeTouch: null,
+    touchStartTime: null,
+  };
 
-  // Smooth value tracking
-  private smoothDelta: { x: number; y: number };
-  private smoothVelocity: { x: number; y: number };
-  private previousDelta: { x: number; y: number };
+  private animationFrame: number | null = null;
+  private scrollTimeout: number | null = null;
+  private isBrowser: boolean;
 
-  // Immediate direction tracking
-  private lastRawDelta: { x: number; y: number };
-  private lastDirection: DirectionState;
-
-  // Current state
-  private state: ScrollState;
+  private state: ScrollState = {
+    isScrolling: false,
+    velocity: { x: 0, y: 0 },
+    direction: { x: "none", y: "none" },
+    delta: { x: 0, y: 0 },
+    rawScroll: { x: 0, y: 0 },
+  };
 
   /**
-   * Creates a new DoomScroller instance.
-   * Note: Call {@link init} after creating the instance to start scroll detection.
-   *
-   * @param options - Configuration options for customizing scroll behavior
+   * Creates a new DoomScroller instance
    */
   constructor(options: Partial<DoomScrollerOptions> = {}) {
-    this.options = { ...DoomScroller.DEFAULT_OPTIONS, ...options };
-    this.directionDetector = new DirectionDetector(
-      this.options.directionThreshold,
-      this.options.smoothingFactor
-    );
-
-    // Initialize instance variables
-    this.subscribers = new Set();
-    this.animationFrame = null;
-    this.scrollTimeout = null;
-    this.lastEventTime = 0;
-    this.initialized = false;
-
-    // Initialize tracking values
-    this.smoothDelta = { x: 0, y: 0 };
-    this.smoothVelocity = { x: 0, y: 0 };
-    this.previousDelta = { x: 0, y: 0 };
-    this.lastRawDelta = { x: 0, y: 0 };
-    this.lastDirection = { x: "none", y: "none" };
-
-    // Initialize state
-    this.state = {
-      isScrolling: false,
-      velocity: { x: 0, y: 0 },
-      direction: { x: "none", y: "none" },
-      delta: { x: 0, y: 0 },
-      rawScroll: { x: 0, y: 0 },
+    this.config = {
+      debounceTime: options.debounceTime ?? 200,
+      wheel: { ...DEFAULT_MOVEMENT_CONFIG, ...options.wheel },
+      touch: {
+        ...DEFAULT_MOVEMENT_CONFIG,
+        ...DEFAULT_MOMENTUM_CONFIG,
+        ...options.touch,
+      },
     };
-  }
 
-  /**
-   * Checks if the current environment is a browser with required features
-   * @internal
-   */
-  private isBrowserEnvironment(): boolean {
-    return (
-      typeof window !== "undefined" &&
-      typeof window.addEventListener === "function" &&
-      typeof window.removeEventListener === "function" &&
-      typeof window.requestAnimationFrame === "function" &&
-      typeof performance?.now === "function"
+    this.directionDetector = new DirectionDetector(
+      this.config.wheel.directionThreshold,
+      this.config.wheel.smoothingFactor,
+      this.config.wheel.sampleSize
     );
+
+    this.momentumHandler = new MomentumHandler();
+    this.wheelState = MovementProcessor.createInitialState();
+    this.touchState = MovementProcessor.createInitialState();
+    this.isBrowser = typeof window !== "undefined";
   }
 
   /**
-   * Initializes the scroll detection system.
-   * Must be called after construction and in a browser environment.
-   *
-   * @throws {Error} If called in a non-browser environment or already initialized
+   * Initializes scroll detection
    */
   public init(): void {
-    if (!this.isBrowserEnvironment()) {
-      throw new Error(
-        "DoomScroller requires a browser environment with DOM support"
-      );
+    if (!this.isBrowser) {
+      throw new Error("DoomScroller requires a browser environment");
     }
 
-    if (this.initialized) {
-      throw new Error("DoomScroller is already initialized");
-    }
-
-    try {
-      window.addEventListener("wheel", this.handleWheel, { passive: false });
-      this.initialized = true;
-    } catch (error) {
-      throw new Error(
-        "Failed to initialize DoomScroller: " + (error as Error).message
-      );
-    }
+    window.addEventListener("wheel", this.handleWheel, { passive: false });
+    window.addEventListener("touchstart", this.handleTouchStart, {
+      passive: false,
+    });
+    window.addEventListener("touchmove", this.handleTouchMove, {
+      passive: false,
+    });
+    window.addEventListener("touchend", this.handleTouchEnd, {
+      passive: false,
+    });
+    window.addEventListener("touchcancel", this.handleTouchEnd, {
+      passive: false,
+    });
   }
 
   /**
-   * Updates direction based on raw input for immediate feedback
-   * @internal
-   */
-  private getImmediateDirection(rawDelta: {
-    x: number;
-    y: number;
-  }): DirectionState {
-    const threshold = this.options.directionThreshold;
-
-    return {
-      x:
-        Math.abs(rawDelta.x) < threshold
-          ? this.lastDirection.x
-          : rawDelta.x > 0
-            ? "right"
-            : "left",
-      y:
-        Math.abs(rawDelta.y) < threshold
-          ? this.lastDirection.y
-          : rawDelta.y > 0
-            ? "down"
-            : "up",
-    };
-  }
-
-  /**
-   * Processes immediate movement updates before smoothing
-   * @internal
-   */
-  private processImmediateUpdate(rawDelta: { x: number; y: number }): void {
-    const newDirection = this.getImmediateDirection(rawDelta);
-
-    if (
-      Math.abs(rawDelta.x) > this.options.directionThreshold ||
-      Math.abs(rawDelta.y) > this.options.directionThreshold
-    ) {
-      this.state.direction = newDirection;
-      this.lastDirection = newDirection;
-    }
-  }
-
-  /**
-   * Applies exponential smoothing to a single value
-   * @internal
-   */
-  private smooth(current: number, previous: number): number {
-    return (
-      this.options.smoothingFactor * current +
-      (1 - this.options.smoothingFactor) * previous
-    );
-  }
-
-  /**
-   * Applies smoothing to a 2D vector
-   * @internal
-   */
-  private smoothVector(
-    current: { x: number; y: number },
-    previous: { x: number; y: number }
-  ): { x: number; y: number } {
-    return {
-      x: this.smooth(current.x, previous.x),
-      y: this.smooth(current.y, previous.y),
-    };
-  }
-
-  /**
-   * Normalizes wheel event delta values across different browsers and input methods
-   * @internal
-   */
-  private normalizeWheelDelta(event: WheelEvent): { x: number; y: number } {
-    let { deltaX, deltaY } = event;
-
-    switch (event.deltaMode) {
-      case 1: // LINE mode
-        deltaX *= 16;
-        deltaY *= 16;
-        break;
-      case 2: // PAGE mode
-        deltaX *= 100;
-        deltaY *= 100;
-        break;
-    }
-
-    return {
-      x: deltaX * this.options.speedMultiplier,
-      y: deltaY * this.options.speedMultiplier,
-    };
-  }
-
-  /**
-   * Handles wheel events and initiates scroll state updates
-   * @internal
-   */
-  private handleWheel = (event: WheelEvent): void => {
-    event.preventDefault();
-
-    const rawDelta = this.normalizeWheelDelta(event);
-    const timestamp = performance.now();
-
-    // Handle immediate direction update
-    this.processImmediateUpdate(rawDelta);
-
-    // Store raw values
-    this.state.rawScroll = rawDelta;
-    this.lastRawDelta = rawDelta;
-
-    // Apply smoothing to delta for velocity calculations
-    this.smoothDelta = this.smoothVector(rawDelta, this.previousDelta);
-    this.previousDelta = this.smoothDelta;
-
-    if (!this.state.isScrolling) {
-      this.state.isScrolling = true;
-      this.lastEventTime = timestamp;
-      this.startAnimation();
-    }
-
-    // Notify subscribers immediately for direction changes
-    this.notifySubscribers();
-    this.scheduleScrollEnd();
-  };
-
-  /**
-   * Schedules the end of scroll detection after inactivity
-   * @internal
-   */
-  private scheduleScrollEnd(): void {
-    if (!this.isBrowserEnvironment()) return;
-
-    if (this.scrollTimeout) {
-      window.clearTimeout(this.scrollTimeout);
-    }
-
-    this.scrollTimeout = window.setTimeout(
-      () => this.endScroll(),
-      this.options.debounceTime
-    );
-  }
-
-  /**
-   * Handles cleanup when scrolling ends
-   * @internal
-   */
-  private endScroll(): void {
-    this.state.isScrolling = false;
-    this.directionDetector.reset();
-
-    // Reset smooth values
-    this.smoothDelta = { x: 0, y: 0 };
-    this.smoothVelocity = { x: 0, y: 0 };
-    this.previousDelta = { x: 0, y: 0 };
-
-    // Reset immediate tracking
-    this.lastRawDelta = { x: 0, y: 0 };
-    this.lastDirection = { x: "none", y: "none" };
-
-    if (this.animationFrame !== null && this.isBrowserEnvironment()) {
-      window.cancelAnimationFrame(this.animationFrame);
-      this.animationFrame = null;
-    }
-
-    // Reset state
-    this.state.delta = { x: 0, y: 0 };
-    this.state.velocity = { x: 0, y: 0 };
-    this.state.direction = { x: "none", y: "none" };
-    this.state.rawScroll = { x: 0, y: 0 };
-
-    this.notifySubscribers();
-  }
-
-  /**
-   * Starts the animation loop for continuous state updates
-   * @internal
-   */
-  private startAnimation(): void {
-    if (!this.isBrowserEnvironment()) return;
-
-    const animate = (): void => {
-      if (!this.state.isScrolling) return;
-
-      this.updateState();
-      this.notifySubscribers();
-
-      if (this.isBrowserEnvironment()) {
-        this.animationFrame = window.requestAnimationFrame(animate);
-      }
-    };
-
-    this.animationFrame = window.requestAnimationFrame(animate);
-  }
-
-  /**
-   * Updates the current scroll state with latest calculations
-   * @internal
-   */
-  private updateState(): void {
-    this.state.delta = this.smoothDelta;
-
-    const now = performance.now();
-    const timeDelta = now - this.lastEventTime;
-    this.lastEventTime = now;
-
-    if (timeDelta > 0) {
-      const instantVelocity = {
-        x: this.smoothDelta.x / timeDelta,
-        y: this.smoothDelta.y / timeDelta,
-      };
-
-      this.smoothVelocity = this.smoothVector(
-        instantVelocity,
-        this.smoothVelocity
-      );
-      this.state.velocity = this.smoothVelocity;
-    }
-  }
-
-  /**
-   * Notifies all subscribers of the current state
-   * @internal
-   */
-  private notifySubscribers(): void {
-    const stateCopy: ScrollState = { ...this.state };
-    for (const subscriber of this.subscribers) {
-      subscriber(stateCopy);
-    }
-  }
-
-  /**
-   * Subscribes to scroll state updates.
-   * The callback will be invoked with the current scroll state whenever it changes.
-   *
-   * @param callback - Function to be called with scroll state updates
-   * @returns Function to remove the subscription
+   * Subscribes to scroll state updates
    */
   public subscribe(callback: (state: ScrollState) => void): () => void {
     this.subscribers.add(callback);
@@ -392,31 +130,278 @@ export class DoomScroller {
   }
 
   /**
-   * Cleans up all resources and event listeners.
-   * Should be called when the scroller is no longer needed.
+   * Updates configuration at runtime
+   */
+  public updateConfig(options: Partial<DoomScrollerOptions>): void {
+    if (options.wheel) {
+      Object.assign(this.config.wheel, options.wheel);
+      this.directionDetector.updateConfig({
+        threshold: this.config.wheel.directionThreshold,
+        smoothingFactor: this.config.wheel.smoothingFactor,
+        sampleSize: this.config.wheel.sampleSize,
+      });
+    }
+
+    if (options.touch) {
+      Object.assign(this.config.touch, options.touch);
+    }
+
+    if (options.debounceTime !== undefined) {
+      this.config.debounceTime = options.debounceTime;
+    }
+  }
+
+  /**
+   * Cleans up event listeners and resources
    */
   public destroy(): void {
-    if (!this.initialized) return;
+    if (this.isBrowser) {
+      window.removeEventListener("wheel", this.handleWheel);
+      window.removeEventListener("touchstart", this.handleTouchStart);
+      window.removeEventListener("touchmove", this.handleTouchMove);
+      window.removeEventListener("touchend", this.handleTouchEnd);
+      window.removeEventListener("touchcancel", this.handleTouchEnd);
 
-    if (this.isBrowserEnvironment()) {
-      try {
-        window.removeEventListener("wheel", this.handleWheel);
+      this.momentumHandler.stop();
 
-        if (this.animationFrame !== null) {
-          window.cancelAnimationFrame(this.animationFrame);
-          this.animationFrame = null;
-        }
+      if (this.animationFrame) {
+        cancelAnimationFrame(this.animationFrame);
+      }
 
-        if (this.scrollTimeout !== null) {
-          window.clearTimeout(this.scrollTimeout);
-          this.scrollTimeout = null;
-        }
-      } catch (error) {
-        console.warn("Error during DoomScroller cleanup:", error);
+      if (this.scrollTimeout) {
+        clearTimeout(this.scrollTimeout);
       }
     }
 
     this.subscribers.clear();
-    this.initialized = false;
+  }
+
+  /**
+   * Handles wheel events
+   */
+  private handleWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    const rawDelta = InputHandler.normalizeWheelDelta(
+      event,
+      this.config.wheel.speedMultiplier,
+      this.config.wheel.invertX,
+      this.config.wheel.invertY
+    );
+    this.processMovement("wheel", rawDelta, performance.now());
+  };
+
+  /**
+   * Handles touch start
+   */
+  private handleTouchStart = (event: TouchEvent): void => {
+    event.preventDefault();
+    const touch = event.touches[0];
+
+    if (!touch || this.touchTracking.isActive) return;
+
+    this.touchTracking.isActive = true;
+    this.touchTracking.activeTouch = touch.identifier;
+    this.touchTracking.touchStartTime = performance.now();
+
+    if (this.momentumHandler.active) {
+      this.momentumHandler.stop();
+    }
+
+    const point = InputHandler.createTouchPoint(touch);
+    this.touchState.lastPosition = point;
+    this.touchState.recentPoints = [point];
+  };
+
+  /**
+   * Handles touch move
+   */
+  private handleTouchMove = (event: TouchEvent): void => {
+    event.preventDefault();
+
+    const touch = InputHandler.findActiveTouch(
+      event.touches,
+      this.touchTracking
+    );
+    if (!touch || !this.touchState.lastPosition) return;
+
+    const timestamp = performance.now();
+    const delta = InputHandler.getTouchDelta(
+      touch,
+      this.touchState.lastPosition,
+      this.config.touch.speedMultiplier,
+      this.config.touch.invertX,
+      this.config.touch.invertY
+    );
+
+    this.touchState.lastPosition = InputHandler.updateTouchState(
+      this.touchState.lastPosition,
+      touch
+    );
+    this.processMovement("touch", delta, timestamp);
+  };
+
+  /**
+   * Handles touch end
+   */
+  private handleTouchEnd = (event: TouchEvent): void => {
+    event.preventDefault();
+
+    const isActiveTouch = Array.from(event.changedTouches).some(
+      (t) => t.identifier === this.touchTracking.activeTouch
+    );
+
+    if (!isActiveTouch) return;
+
+    const config = this.config.touch;
+    const touchDuration = this.touchTracking.touchStartTime
+      ? performance.now() - this.touchTracking.touchStartTime
+      : 0;
+
+    const shouldStartMomentum =
+      config.enabled &&
+      touchDuration >= config.minTouchDuration &&
+      this.touchState.velocity &&
+      (Math.abs(this.touchState.velocity.x) > config.minVelocity ||
+        Math.abs(this.touchState.velocity.y) > config.minVelocity);
+
+    this.resetTouchTracking();
+
+    if (shouldStartMomentum) {
+      const cappedVelocity = {
+        x: MovementProcessor.capVelocity(
+          this.touchState.velocity.x,
+          config.maxVelocity
+        ),
+        y: MovementProcessor.capVelocity(
+          this.touchState.velocity.y,
+          config.maxVelocity
+        ),
+      };
+
+      this.momentumHandler.start(
+        cappedVelocity,
+        config,
+        this.handleMomentumFrame,
+        () => this.endScroll()
+      );
+    } else {
+      this.endScroll();
+    }
+
+    this.touchState.lastPosition = null;
+    this.touchState.recentPoints = [];
+  };
+
+  /**
+   * Handles momentum scrolling frames
+   */
+  private handleMomentumFrame = (delta: Vector2D, timestamp: number): void => {
+    this.processMovement("touch", delta, timestamp);
+  };
+
+  /**
+   * Resets touch tracking state
+   */
+  private resetTouchTracking(): void {
+    this.touchTracking.isActive = false;
+    this.touchTracking.activeTouch = null;
+    this.touchTracking.touchStartTime = null;
+  }
+
+  /**
+   * Processes movement from any input source
+   */
+  private processMovement(
+    source: "wheel" | "touch",
+    rawDelta: Vector2D,
+    timestamp: number
+  ): void {
+    const state = source === "wheel" ? this.wheelState : this.touchState;
+    const config = source === "wheel" ? this.config.wheel : this.config.touch;
+
+    MovementProcessor.processMovement(state, rawDelta, timestamp, config);
+    this.updateGlobalState(state);
+
+    if (!state.isActive) {
+      state.isActive = true;
+      this.startAnimation();
+    }
+
+    this.scheduleScrollEnd();
+  }
+
+  /**
+   * Updates global scroll state
+   */
+  private updateGlobalState(state: MovementState): void {
+    this.state = {
+      isScrolling: true,
+      velocity: state.velocity,
+      direction: this.directionDetector.detectDirection(state.rawDelta),
+      delta: state.smoothDelta,
+      rawScroll: state.rawDelta,
+    };
+
+    this.notifySubscribers();
+  }
+
+  /**
+   * Starts animation loop
+   */
+  private startAnimation(): void {
+    const animate = (): void => {
+      this.animationFrame = requestAnimationFrame(animate);
+      this.notifySubscribers();
+    };
+
+    this.animationFrame = requestAnimationFrame(animate);
+  }
+
+  /**
+   * Schedules scroll end detection
+   */
+  private scheduleScrollEnd(): void {
+    if (this.scrollTimeout) {
+      clearTimeout(this.scrollTimeout);
+    }
+
+    this.scrollTimeout = window.setTimeout(
+      () => this.endScroll(),
+      this.config.debounceTime
+    ) as unknown as number;
+  }
+
+  /**
+   * Ends current scroll interaction
+   */
+  private endScroll(): void {
+    this.wheelState.isActive = false;
+    this.touchState.isActive = false;
+    this.directionDetector.reset();
+
+    if (this.animationFrame) {
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = null;
+    }
+
+    this.state = {
+      isScrolling: false,
+      velocity: { x: 0, y: 0 },
+      direction: { x: "none", y: "none" },
+      delta: { x: 0, y: 0 },
+      rawScroll: { x: 0, y: 0 },
+    };
+
+    this.notifySubscribers();
+  }
+
+  /**
+   * Notifies subscribers of state changes
+   */
+  private notifySubscribers(): void {
+    const stateCopy = { ...this.state };
+    for (const subscriber of this.subscribers) {
+      subscriber(stateCopy);
+    }
   }
 }

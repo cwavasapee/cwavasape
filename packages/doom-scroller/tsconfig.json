@@ -20,7 +20,7 @@
 
     /* DOM and Types */
     "lib": ["es2022", "dom", "dom.iterable"],
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

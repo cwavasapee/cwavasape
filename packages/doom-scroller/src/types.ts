@@ -1,62 +1,98 @@
 /**
- * Represents the possible horizontal scroll directions
+ * @file Type definitions for the DoomScroller library
  */
+
+/** Represents 2D coordinates or movements */
+export interface Vector2D {
+  x: number;
+  y: number;
+}
+
+/** Horizontal scroll direction states */
 export type HorizontalDirection = "left" | "right" | "none";
 
-/**
- * Represents the possible vertical scroll directions
- */
+/** Vertical scroll direction states */
 export type VerticalDirection = "up" | "down" | "none";
 
-/**
- * Combined state of both horizontal and vertical scroll directions
- */
+/** Combined direction state for both axes */
 export interface DirectionState {
-  /** Horizontal direction of scrolling */
   x: HorizontalDirection;
-  /** Vertical direction of scrolling */
   y: VerticalDirection;
 }
 
-/**
- * Represents the complete state of scrolling at any given moment
- */
-export interface ScrollState {
-  /** Whether scrolling is currently active */
-  isScrolling: boolean;
-  /** Current velocity in pixels per millisecond */
-  velocity: {
-    x: number;
-    y: number;
-  };
-  /** Current scroll direction state */
-  direction: DirectionState;
-  /** Change in scroll position since last update */
-  delta: {
-    x: number;
-    y: number;
-  };
-  /** Raw scroll values from the wheel event */
-  rawScroll: {
-    x: number;
-    y: number;
-  };
+/** Time-stamped position data */
+export interface TimePoint extends Vector2D {
+  timestamp: number;
 }
 
-/**
- * Configuration options for the DoomScroller instance
- */
+/** Configuration for direction inversion */
+export interface DirectionConfig {
+  invertX: boolean;
+  invertY: boolean;
+}
+
+/** Movement processing configuration */
+export interface MovementConfig extends DirectionConfig {
+  /** Speed multiplier for movement (default: 1) */
+  speedMultiplier: number;
+  /** Smoothing factor for movement (0-1, default: 0.2) */
+  smoothingFactor: number;
+  /** Threshold for direction change detection */
+  directionThreshold: number;
+  /** Minimum velocity to trigger movement */
+  minVelocity: number;
+  /** Maximum allowed velocity */
+  maxVelocity: number;
+  /** Number of samples to keep for calculations */
+  sampleSize: number;
+}
+
+/** Momentum scrolling configuration */
+export interface MomentumConfig {
+  /** Enable/disable momentum scrolling */
+  enabled: boolean;
+  /** Duration of momentum effect in ms */
+  duration: number;
+  /** Friction coefficient (0-1) */
+  friction: number;
+  /** Minimum velocity to trigger momentum */
+  minVelocity: number;
+  /** Minimum touch duration for momentum */
+  minTouchDuration: number;
+}
+
+/** Internal movement tracking state */
+export interface MovementState {
+  isActive: boolean;
+  lastPosition: TimePoint | null;
+  velocity: Vector2D;
+  smoothDelta: Vector2D;
+  rawDelta: Vector2D;
+  recentPoints: TimePoint[];
+}
+
+/** Touch interaction tracking state */
+export interface TouchTrackingState {
+  isActive: boolean;
+  activeTouch: number | null;
+  touchStartTime: number | null;
+}
+
+/** Complete scroll state information */
+export interface ScrollState {
+  isScrolling: boolean;
+  velocity: Vector2D;
+  direction: DirectionState;
+  delta: Vector2D;
+  rawScroll: Vector2D;
+}
+
+/** Main DoomScroller configuration options */
 export interface DoomScrollerOptions {
-  /** Multiplier for scroll speed. Default: 1 */
-  speedMultiplier?: number;
-  /** Number of samples to keep for smoothing. Default: 5 */
-  sampleSize?: number;
-  /** Minimum velocity to register as movement. Default: 0.1 */
-  minVelocity?: number;
-  /** Threshold for direction change detection. Default: 0.15 */
-  directionThreshold?: number;
-  /** Factor for smoothing scroll movements. Default: 0.3 */
-  smoothingFactor?: number;
-  /** Time in ms to wait before considering scroll ended. Default: 150 */
+  /** Debounce time for scroll end detection (ms) */
   debounceTime?: number;
+  /** Mouse wheel configuration */
+  wheel?: Partial<MovementConfig>;
+  /** Touch interaction configuration */
+  touch?: Partial<MovementConfig & MomentumConfig>;
 }

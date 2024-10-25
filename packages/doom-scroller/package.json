@@ -1,6 +1,9 @@
 {
   "name": "@cwavasape/doom-scroller",
   "type": "module",
+  "repository": {
+    "url": "https://github.com/cwavasapee/cwavasape/tree/main/packages/doom-scroller"
+  },
   "license": "MIT",
   "version": "0.0.1",
   "main": "./dist/index.js",
@@ -25,7 +28,8 @@
     "test:ui": "vitest --ui"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.3",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.2",
     "jsdom": "^25.0.1",
     "tsup": "^8.3.0",
     "typescript": "^5.0.0",
