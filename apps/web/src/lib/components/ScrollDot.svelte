@@ -1,15 +1,9 @@
 <script lang="ts">
-	/**
-	 * Represents the position of the dot on the canvas
-	 */
 	interface DotPosition {
 		x: number;
 		y: number;
 	}
 
-	/**
-	 * Configuration for the dot's movement and appearance
-	 */
 	interface DotConfig {
 		size: number;
 		color: string;
@@ -20,57 +14,34 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { DoomScroller, type ScrollState } from '@cwavasape/doom-scroller';
 
-	let {
-		config = {
-			size: 20,
-			color: '#ff3e00',
-			speed: 1.5,
-			friction: 0.5
-		},
-		height = 500,
-		width = 500
-	}: { config?: DotConfig; height?: number; width?: number } = $props();
-
-	// State
+	let config: DotConfig = { size: 20, color: '#ff3e00', speed: 1.5, friction: 0.2 };
 	let canvas: HTMLCanvasElement;
 	let context: CanvasRenderingContext2D | null;
 	let scroller: DoomScroller;
 	let animationFrame: number;
+	let height = 0;
+	let width = 0;
 
-	// Dot position and velocity using Svelte 5's state
-	const position = $state<DotPosition>({
-		x: width / 2,
-		y: height / 2
-	});
+	let stateObj: ScrollState | undefined = $state();
+	const position = $state<DotPosition>({ x: 0, y: 0 });
+	const velocity = $state<DotPosition>({ x: 0, y: 0 });
 
-	const velocity = $state<DotPosition>({
-		x: 0,
-		y: 0
-	});
-
-	/**
-	 * Handles scroll state updates from DoomScroller
-	 */
 	function handleScroll(state: ScrollState): void {
+		stateObj = state;
 		if (!state.isScrolling) return;
-
 		velocity.x += state.velocity.x * config.speed;
 		velocity.y += state.velocity.y * config.speed;
 	}
 
-	/**
-	 * Updates the dot's position based on velocity and handles boundaries
-	 */
 	function updatePosition(): void {
-		// Update position based on velocity
 		position.x += velocity.x;
 		position.y += velocity.y;
-
-		// Apply friction
 		velocity.x *= config.friction;
 		velocity.y *= config.friction;
 
-		// Handle boundaries
+		if (Math.abs(velocity.x) < 0.01) velocity.x = 0;
+		if (Math.abs(velocity.y) < 0.01) velocity.y = 0;
+
 		if (position.x < config.size) {
 			position.x = config.size;
 			velocity.x = 0;
@@ -88,16 +59,9 @@
 		}
 	}
 
-	/**
-	 * Draws the dot on the canvas
-	 */
 	function draw(): void {
 		if (!context) return;
-
-		// Clear canvas
 		context.clearRect(0, 0, width, height);
-
-		// Draw dot
 		context.beginPath();
 		context.arc(position.x, position.y, config.size, 0, Math.PI * 2);
 		context.fillStyle = config.color;
@@ -105,51 +69,61 @@
 		context.closePath();
 	}
 
-	/**
-	 * Animation loop
-	 */
 	function animate(): void {
 		updatePosition();
 		draw();
 		animationFrame = requestAnimationFrame(animate);
 	}
 
-	onMount(() => {
-		// Initialize canvas context
-		context = canvas.getContext('2d');
-		if (!context) {
-			throw new Error('Could not get canvas context');
+	function updateCanvasSize() {
+		if (typeof window !== 'undefined') {
+			width = window.innerWidth;
+			height = window.innerHeight;
+			if (context) {
+				canvas.width = width;
+				canvas.height = height;
+			}
+			position.x = width / 2;
+			position.y = height / 2;
 		}
+	}
 
-		// Initialize DoomScroller
+	onMount(() => {
+		context = canvas.getContext('2d');
+		if (!context) throw new Error('Could not get canvas context');
+
 		scroller = new DoomScroller({
-			smoothingFactor: 0.2,
-			speedMultiplier: 1.5,
-			directionThreshold: 0.1
+			smoothingFactor: 0.5,
+			directionThreshold: 0.15,
+			debounceTime: 200
 		});
 
 		scroller.init();
 		scroller.subscribe(handleScroll);
 
-		// Start animation loop
+		updateCanvasSize();
+		if (typeof window !== 'undefined') {
+			window.addEventListener('resize', updateCanvasSize);
+		}
+
 		animate();
 	});
 
 	onDestroy(() => {
-		if (scroller) {
-			scroller.destroy();
-		}
-		if (animationFrame) {
-			cancelAnimationFrame(animationFrame);
+		if (scroller) scroller.destroy();
+		if (animationFrame) cancelAnimationFrame(animationFrame);
+		if (typeof window !== 'undefined') {
+			window.removeEventListener('resize', updateCanvasSize);
 		}
 	});
 </script>
 
-<canvas bind:this={canvas} {width} {height} style="border: 1px solid #ccc;"> </canvas>
+<canvas class="block overscroll-none" bind:this={canvas}> </canvas>
 
-<style>
-	canvas {
-		display: block;
-		margin: 0 auto;
-	}
-</style>
+<div class="absolute top-0 left-0">
+	<div class="flex flex-col gap-2">
+		<label for="velocity">Velocity</label>
+		<pre>{JSON.stringify(velocity, null, 2)}</pre>
+	</div>
+	<pre>{JSON.stringify(stateObj, null, 2)}</pre>
+</div>
