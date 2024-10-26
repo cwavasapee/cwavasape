@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { InputHandler } from '../../src/core/input-handler';
-import type { TimePoint } from '../../src/types';
+import { InputHandler } from '../../../src/core/input-handler';
+import type { TimePoint } from '../../../src/types';
 
 describe('InputHandler', () => {
   describe('normalizeWheel', () => {

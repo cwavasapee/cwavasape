@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { MovementProcessor } from '../../src/core/movement-processor';
-import type { TimePoint } from '../../src/types';
+import { MovementProcessor } from '../../../src/core/movement-processor';
+import type { TimePoint } from '../../../src/types';
 
 describe('MovementProcessor', () => {
   describe('calculateVelocity', () => {
