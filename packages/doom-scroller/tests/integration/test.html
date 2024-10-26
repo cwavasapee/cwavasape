@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DoomScroller Tests</title>
+    <style>
+        #test-container {
+            width: 100%;
+            height: 100vh;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="test-container">
+        <div style="height: 2000px;">Scroll content</div>
+    </div>
+    <script type="module">
+        import { DoomScroller } from '/dist/index.js';
+        
+        // Make DoomScroller available globally for tests
+        window.DoomScroller = DoomScroller;
+        
+        // Add event creation helpers
+        window.createWheelEvent = (delta) => {
+            return new WheelEvent('wheel', {
+                deltaX: delta.x,
+                deltaY: delta.y,
+                bubbles: true,
+                cancelable: true
+            });
+        };
+
+        window.createTouchEvent = (type, coords, identifier = 0) => {
+            const touch = new Touch({
+                identifier,
+                target: document.getElementById('test-container'),
+                clientX: coords.x,
+                clientY: coords.y,
+                pageX: coords.x,
+                pageY: coords.y,
+                screenX: coords.x,
+                screenY: coords.y
+            });
+
+            return new TouchEvent(type, {
+                touches: type === 'touchend' ? [] : [touch],
+                changedTouches: [touch],
+                targetTouches: type === 'touchend' ? [] : [touch],
+                bubbles: true,
+                cancelable: true
+            });
+        };
+    </script>
+</body>
+</html>

@@ -11,6 +11,8 @@
 	});
 </script>
 
-{@render children()}
+<div class="w-screen h-screen overscroll-none" onscroll={({ preventDefault }) => preventDefault()}>
+	{@render children()}
+</div>
 
 <Debug />

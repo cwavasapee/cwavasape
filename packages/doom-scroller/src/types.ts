@@ -1,98 +1,184 @@
 /**
  * @file Type definitions for the DoomScroller library
+ * @module doom-scroller/types
  */
 
-/** Represents 2D coordinates or movements */
+/**
+ * Represents 2D coordinates or movements in a two-dimensional space
+ * @example
+ * ```typescript
+ * const position: Vector2D = { x: 100, y: 200 };
+ * const velocity: Vector2D = { x: -0.5, y: 1.2 };
+ * ```
+ */
 export interface Vector2D {
+  /** X-axis coordinate or movement */
   x: number;
+  /** Y-axis coordinate or movement */
   y: number;
 }
 
-/** Horizontal scroll direction states */
-export type HorizontalDirection = "left" | "right" | "none";
+/**
+ * Represents the possible movement directions
+ * - 'positive': Movement in the positive direction (right/down)
+ * - 'negative': Movement in the negative direction (left/up)
+ * - 'none': No significant movement
+ */
+export type Direction = "positive" | "negative" | "none";
 
-/** Vertical scroll direction states */
-export type VerticalDirection = "up" | "down" | "none";
-
-/** Combined direction state for both axes */
+/**
+ * Combined direction state for both X and Y axes
+ * @example
+ * ```typescript
+ * const direction: DirectionState = {
+ *   x: "positive", // Moving right
+ *   y: "none"     // No vertical movement
+ * };
+ * ```
+ */
 export interface DirectionState {
-  x: HorizontalDirection;
-  y: VerticalDirection;
+  /** X-axis direction */
+  x: Direction;
+  /** Y-axis direction */
+  y: Direction;
 }
 
-/** Time-stamped position data */
+/**
+ * Time-stamped position data used for velocity calculations
+ * @internal
+ */
 export interface TimePoint extends Vector2D {
+  /** Timestamp in milliseconds (from performance.now()) */
   timestamp: number;
 }
 
-/** Configuration for direction inversion */
-export interface DirectionConfig {
-  invertX: boolean;
-  invertY: boolean;
-}
-
-/** Movement processing configuration */
-export interface MovementConfig extends DirectionConfig {
-  /** Speed multiplier for movement (default: 1) */
+/**
+ * Configuration options for the DoomScroller
+ * @example
+ * ```typescript
+ * const config: ScrollConfig = {
+ *   speedMultiplier: 1.5,    // 50% faster than default
+ *   smoothingFactor: 0.3,    // More smoothing
+ *   invertY: true,           // Invert vertical scrolling
+ * };
+ * ```
+ */
+export interface ScrollConfig {
+  /**
+   * Speed multiplier for scroll movements
+   * @default 1
+   */
   speedMultiplier: number;
-  /** Smoothing factor for movement (0-1, default: 0.2) */
+
+  /**
+   * Smoothing factor for movement (0-1)
+   * Higher values = more responsive but less smooth
+   * Lower values = smoother but more latency
+   * @default 0.2
+   */
   smoothingFactor: number;
-  /** Threshold for direction change detection */
+
+  /**
+   * Minimum movement required to trigger direction change
+   * @default 0.15
+   */
   directionThreshold: number;
-  /** Minimum velocity to trigger movement */
+
+  /**
+   * Minimum velocity required to trigger movement
+   * @default 0.1
+   */
   minVelocity: number;
-  /** Maximum allowed velocity */
+
+  /**
+   * Maximum allowed velocity
+   * @default 50
+   */
   maxVelocity: number;
-  /** Number of samples to keep for calculations */
+
+  /**
+   * Number of samples to keep for velocity calculations
+   * @default 5
+   */
   sampleSize: number;
+
+  /**
+   * Invert X axis movement
+   * @default false
+   */
+  invertX: boolean;
+
+  /**
+   * Invert Y axis movement
+   * @default false
+   */
+  invertY: boolean;
+
+  /**
+   * Time in milliseconds to wait before declaring scroll ended
+   * @default 200
+   */
+  debounceTime: number;
 }
 
-/** Momentum scrolling configuration */
-export interface MomentumConfig {
-  /** Enable/disable momentum scrolling */
-  enabled: boolean;
-  /** Duration of momentum effect in ms */
-  duration: number;
-  /** Friction coefficient (0-1) */
-  friction: number;
-  /** Minimum velocity to trigger momentum */
-  minVelocity: number;
-  /** Minimum touch duration for momentum */
-  minTouchDuration: number;
-}
-
-/** Internal movement tracking state */
-export interface MovementState {
-  isActive: boolean;
-  lastPosition: TimePoint | null;
-  velocity: Vector2D;
-  smoothDelta: Vector2D;
-  rawDelta: Vector2D;
-  recentPoints: TimePoint[];
-}
-
-/** Touch interaction tracking state */
-export interface TouchTrackingState {
-  isActive: boolean;
-  activeTouch: number | null;
-  touchStartTime: number | null;
-}
-
-/** Complete scroll state information */
+/**
+ * Current scroll state provided to subscribers
+ * @example
+ * ```typescript
+ * scroller.subscribe((state: ScrollState) => {
+ *   if (state.isScrolling) {
+ *     console.log(`Moving at velocity: ${state.velocity.x}, ${state.velocity.y}`);
+ *     console.log(`Direction: ${state.direction.x}, ${state.direction.y}`);
+ *   }
+ * });
+ * ```
+ */
 export interface ScrollState {
+  /** Whether scrolling is currently active */
   isScrolling: boolean;
+  /** Current velocity vector */
   velocity: Vector2D;
+  /** Current scroll direction */
   direction: DirectionState;
+  /** Smoothed delta movement */
   delta: Vector2D;
-  rawScroll: Vector2D;
+  /** Raw (unsmoothed) delta movement */
+  rawDelta: Vector2D;
 }
 
-/** Main DoomScroller configuration options */
-export interface DoomScrollerOptions {
-  /** Debounce time for scroll end detection (ms) */
-  debounceTime?: number;
-  /** Mouse wheel configuration */
-  wheel?: Partial<MovementConfig>;
-  /** Touch interaction configuration */
-  touch?: Partial<MovementConfig & MomentumConfig>;
+/**
+ * Internal scroll tracking state
+ * @internal
+ */
+export interface ScrollTrackingState extends ScrollState {
+  /** Last recorded point */
+  lastPoint: TimePoint | null;
+  /** Recent movement points for velocity calculation */
+  recentPoints: readonly TimePoint[];
+}
+
+/**
+ * Touch tracking data for gesture detection
+ * @internal
+ */
+export interface TouchTrackingData {
+  /** Initial touch X position */
+  startX: number;
+  /** Initial touch Y position */
+  startY: number;
+  /** Touch start timestamp */
+  startTime: number;
+  /** Whether touch has moved enough to be considered scrolling */
+  isScrolling: boolean;
+}
+
+/**
+ * Configuration for touch gesture detection
+ * @internal
+ */
+export interface TouchConfig {
+  /** Minimum movement distance to start scrolling (pixels) */
+  scrollThreshold: number;
+  /** Maximum duration for tap detection (milliseconds) */
+  tapThreshold: number;
 }

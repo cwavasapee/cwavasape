@@ -8,6 +8,7 @@
 	let stats = $state<ScrollStats | null>(null);
 	let currentState = $state<ScrollState | null>(null);
 	let tool_debugger: ScrollDebugger;
+	let openDebugPanel = $state(false);
 
 	// Initialize everything on mount
 	onMount(() => {
@@ -46,43 +47,51 @@
 	);
 </script>
 
-<div class="debug-panel">
-	<h2>Scroll Debug Info</h2>
+<button
+	class="absolute top-4 right-4 bg-slate-800 text-white rounded-lg shadow-lg hover:bg-slate-400 transition-colors p-4 z-50"
+	onclick={() => (openDebugPanel = !openDebugPanel)}
+>
+	{openDebugPanel ? 'Close' : 'Open'} Debug Panel
+</button>
+{#if openDebugPanel}
+	<div class="debug-panel">
+		<h2>Scroll Debug Info</h2>
 
-	<div class="stats-container">
-		<div class="stat-item">
-			<span class="label">Current Scrolling:</span>
-			<span class="value">{currentState?.isScrolling ? 'Yes' : 'No'}</span>
+		<div class="stats-container">
+			<div class="stat-item">
+				<span class="label">Current Scrolling:</span>
+				<span class="value">{currentState?.isScrolling ? 'Yes' : 'No'}</span>
+			</div>
+
+			{#if stats}
+				<div class="stat-item">
+					<span class="label">Peak Velocity:</span>
+					<span class="value">{formattedVelocity}</span>
+				</div>
+
+				<div class="stat-item">
+					<span class="label">Total Distance:</span>
+					<span class="value">{formattedDistance}</span>
+				</div>
+
+				<div class="stat-item">
+					<span class="label">Direction Changes:</span>
+					<span class="value">
+						H: {stats.directionChanges.horizontal}, V: {stats.directionChanges.vertical}
+					</span>
+				</div>
+
+				<div class="stat-item">
+					<span class="label">Scroll Duration:</span>
+					<span class="value">{(stats.scrollDuration / 1000).toFixed(2)}s</span>
+				</div>
+			{/if}
 		</div>
-
-		{#if stats}
-			<div class="stat-item">
-				<span class="label">Peak Velocity:</span>
-				<span class="value">{formattedVelocity}</span>
-			</div>
-
-			<div class="stat-item">
-				<span class="label">Total Distance:</span>
-				<span class="value">{formattedDistance}</span>
-			</div>
-
-			<div class="stat-item">
-				<span class="label">Direction Changes:</span>
-				<span class="value">
-					H: {stats.directionChanges.horizontal}, V: {stats.directionChanges.vertical}
-				</span>
-			</div>
-
-			<div class="stat-item">
-				<span class="label">Scroll Duration:</span>
-				<span class="value">{(stats.scrollDuration / 1000).toFixed(2)}s</span>
-			</div>
-		{/if}
+		<div>
+			<pre>{JSON.stringify($scrollerState, null, 2)}</pre>
+		</div>
 	</div>
-	<div>
-		<pre>{JSON.stringify($scrollerState, null, 2)}</pre>
-	</div>
-</div>
+{/if}
 
 <style>
 	.debug-panel {

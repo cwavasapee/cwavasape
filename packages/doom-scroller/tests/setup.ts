@@ -1,60 +1,66 @@
-// setup.ts
-import "@testing-library/jest-dom";
-import { vi } from "vitest";
+import { vi } from 'vitest';
 
-// Extend global to include our mocked functions
-declare global {
-  interface Window {
-    requestAnimationFrame: (callback: FrameRequestCallback) => number;
-    cancelAnimationFrame: (handle: number) => void;
-  }
-}
+// Mock requestAnimationFrame and cancelAnimationFrame
+global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback): number => {
+  return setTimeout(() => callback(performance.now()), 0) as unknown as number;
+});
 
-// Track RAF callbacks
-let rafHandle = 0;
-const rafCallbacks = new Map<number, FrameRequestCallback>();
-
-// Mock requestAnimationFrame
-const requestAnimationFrameMock = vi.fn(
-  (callback: FrameRequestCallback): number => {
-    rafHandle++;
-    rafCallbacks.set(rafHandle, callback);
-    setTimeout(() => {
-      const cb = rafCallbacks.get(rafHandle);
-      if (cb) {
-        rafCallbacks.delete(rafHandle);
-        cb(performance.now());
-      }
-    }, 0);
-    return rafHandle;
-  }
-);
-
-// Mock cancelAnimationFrame
-const cancelAnimationFrameMock = vi.fn((handle: number): void => {
-  rafCallbacks.delete(handle);
+global.cancelAnimationFrame = vi.fn((handle: number): void => {
+  clearTimeout(handle);
 });
 
 // Mock performance.now()
-const performanceNowMock = vi.fn((): number => {
-  return Date.now();
-});
+global.performance.now = vi.fn(() => Date.now());
 
-// Setup global mocks
-global.requestAnimationFrame = requestAnimationFrameMock;
-global.cancelAnimationFrame = cancelAnimationFrameMock;
-global.performance.now = performanceNowMock;
+// Mock Touch constructor
+class MockTouch implements Touch {
+  identifier: number;
+  target: EventTarget;
+  clientX: number;
+  clientY: number;
+  pageX: number;
+  pageY: number;
+  screenX: number;
+  screenY: number;
+  radiusX: number;
+  radiusY: number;
+  rotationAngle: number;
+  force: number;
 
-// Helper to reset all mocks and state
-export function resetRAFMocks(): void {
-  rafCallbacks.clear();
-  rafHandle = 0;
-  vi.clearAllMocks();
+  constructor(init: TouchInit) {
+    this.identifier = init.identifier;
+    this.target = init.target;
+    this.clientX = init.clientX || 0;
+    this.clientY = init.clientY || 0;
+    this.pageX = init.pageX || init.clientX || 0;
+    this.pageY = init.pageY || init.clientY || 0;
+    this.screenX = init.screenX || init.clientX || 0;
+    this.screenY = init.screenY || init.clientY || 0;
+    this.radiusX = 0;
+    this.radiusY = 0;
+    this.rotationAngle = 0;
+    this.force = 0;
+  }
 }
 
-// Export mocked functions for testing
-export const mocks = {
-  requestAnimationFrame: requestAnimationFrameMock,
-  cancelAnimationFrame: cancelAnimationFrameMock,
-  performanceNow: performanceNowMock,
-} as const;
+// Create proper global interfaces
+declare global {
+  interface Window {
+    Touch: typeof MockTouch;
+  }
+}
+
+global.Touch = MockTouch as typeof Touch;
+
+// Mock window if not available (for jsdom)
+if (typeof window === 'undefined') {
+  global.window = {
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    requestAnimationFrame: global.requestAnimationFrame,
+    cancelAnimationFrame: global.cancelAnimationFrame,
+    performance: {
+      now: global.performance.now
+    }
+  } as unknown as Window & typeof globalThis;
+}
