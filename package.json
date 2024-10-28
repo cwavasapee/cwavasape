@@ -1,5 +1,5 @@
 {
-  "name": "cwavasape",
+  "name": "cwavasape-monorepo",
   "private": true,
   "scripts": {
     "build": "turbo build",
