@@ -104,7 +104,6 @@ export class DoomScroller {
    * 4. Prepares the resize observer
    */
   constructor(options: Partial<Options> = {}) {
-    // Type-safe options normalization
     this.options = {
       speedMultiplier: options.speedMultiplier ?? 1,
       debounceTime: options.debounceTime ?? 500,
@@ -145,6 +144,8 @@ export class DoomScroller {
       debug: options.debug ?? false,
     } satisfies Required<Options>;
 
+    this.debugLog("Constructor", "Initializing with options:", options);
+
     // Initialize state and core components
     this.lastState = this.createInitialState();
     this.subscribers = new Set();
@@ -175,6 +176,8 @@ export class DoomScroller {
 
     // Bind event handlers
     this.eventHandler.addHandler(this.queueEvent);
+
+    this.debugLog("Constructor", "Initialization complete");
   }
 
   /**
@@ -192,6 +195,7 @@ export class DoomScroller {
    */
   public start(): void {
     if (this.isActive) return;
+    this.debugLog("Lifecycle", "Starting scroll tracking");
     this.isActive = true;
     this.eventHandler.start();
 
@@ -215,6 +219,7 @@ export class DoomScroller {
    */
   public stop(): void {
     if (!this.isActive) return;
+    this.debugLog("Lifecycle", "Stopping scroll tracking");
 
     this.eventHandler.stop();
     this.resizeObserver.disconnect();
@@ -237,6 +242,7 @@ export class DoomScroller {
    * The returned function can be called to remove the subscription.
    */
   public subscribe(callback: (state: ScrollState) => void): () => void {
+    this.debugLog("Subscriptions", "Adding new subscriber");
     this.subscribers.add(callback);
     callback(this.lastState); // Emit initial state
     return () => this.unsubscribe(callback);
@@ -252,6 +258,7 @@ export class DoomScroller {
    * If the callback is not found, the operation is silently ignored.
    */
   public unsubscribe(callback: (state: ScrollState) => void): void {
+    this.debugLog("Subscriptions", "Removing subscriber");
     this.subscribers.delete(callback);
   }
 
@@ -298,6 +305,7 @@ export class DoomScroller {
    * After calling destroy, the instance should not be reused.
    */
   public destroy(): void {
+    this.debugLog("Lifecycle", "Destroying instance");
     this.stop();
     this.eventHandler.destroy();
 
@@ -336,6 +344,7 @@ export class DoomScroller {
   private queueEvent = (event: ScrollEventData): void => {
     if (!this.isActive) return;
 
+    this.debugLog("Queue", "Adding event to queue:", event);
     this.eventQueue.push(event);
 
     // Only schedule processing if not already scheduled
@@ -355,6 +364,11 @@ export class DoomScroller {
    */
   private processEventQueue = (): void => {
     this.animationFrameId = undefined;
+
+    this.debugLog(
+      "Queue",
+      `Processing ${this.eventQueue.length} queued events`
+    );
 
     // Process only the most recent event for each type
     const lastEvent = this.eventQueue[this.eventQueue.length - 1];
@@ -382,6 +396,8 @@ export class DoomScroller {
    */
   private handleEvent = (event: ScrollEventData): void => {
     if (!this.isActive) return;
+
+    this.debugLog("Event", "Processing event:", event);
 
     if (event.type === "end") {
       this.handleEventEnd();
@@ -424,6 +440,7 @@ export class DoomScroller {
       timestamp: event.timestamp,
     };
 
+    this.debugLog("Event", "New state:", currentState);
     this.lastState = currentState;
     this.notifySubscribers(currentState);
   };
@@ -440,6 +457,8 @@ export class DoomScroller {
    * 4. Resets component states
    */
   private handleEventEnd = (): void => {
+    this.debugLog("Event", "Processing end event");
+
     if (this.endTimeout) {
       window.clearTimeout(this.endTimeout);
       this.endTimeout = undefined;
@@ -556,6 +575,10 @@ export class DoomScroller {
    * breaking the scroll tracking system.
    */
   private notifySubscribers(data: ScrollState): void {
+    this.debugLog("State", "Notifying subscribers", {
+      subscriberCount: this.subscribers.size,
+      state: data,
+    });
     this.subscribers.forEach((callback) => callback(data));
   }
 
@@ -587,6 +610,27 @@ export class DoomScroller {
         unobserve: () => {},
         disconnect: () => {},
       } as ResizeObserver;
+    }
+  }
+
+  /**
+   * Internal debug logger
+   *
+   * @private
+   * @param {string} context - The context/area where the log originated
+   * @param {string} message - The message to log
+   * @param {unknown} [data] - Optional data to include in the log
+   */
+  private debugLog(context: string, message: string, data?: unknown): void {
+    if (!this.options?.debug) return;
+
+    const timestamp = new Date().toISOString();
+    const prefix = `[DoomScroller][${timestamp}][${context}]`;
+
+    if (data !== undefined) {
+      console.log(prefix, message, data);
+    } else {
+      console.log(prefix, message);
     }
   }
 }
