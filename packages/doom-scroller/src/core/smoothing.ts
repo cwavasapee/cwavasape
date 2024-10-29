@@ -20,11 +20,6 @@
  * 3. Inertial scrolling behavior
  * 4. Animation transitions
  *
- * Performance Optimizations:
- * - Efficient sample management
- * - Minimal state updates
- * - Memory-conscious design
- * - Automatic cleanup
  *
  * Browser Support:
  * - Modern browsers (Chrome 60+, Firefox 55+, Safari 11+)

@@ -175,6 +175,24 @@ export class DataProcessor {
     return Number(value.toFixed(precision));
   }
 
+  private validateInput(data: ScrollEventData): void {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid event data provided");
+    }
+
+    if (!data.timestamp || typeof data.timestamp !== "number") {
+      throw new Error("Invalid timestamp in event data");
+    }
+
+    if (
+      !data.position ||
+      typeof data.position.x !== "number" ||
+      typeof data.position.y !== "number"
+    ) {
+      throw new Error("Invalid position data in event");
+    }
+  }
+
   /**
    * Process raw event data into normalized position and delta values
    *
@@ -225,74 +243,85 @@ export class DataProcessor {
     position: Vector2D;
     delta: Vector2D;
   } {
-    // Handle end events first
-    if (event.type === "end") {
-      this.reset();
-      return {
-        position: event.position,
-        delta: { x: 0, y: 0 },
-      };
-    }
+    this.validateInput(event);
 
-    const currentPosition = event.position || this.lastPosition;
-    let delta: Vector2D;
+    try {
+      // Handle end events first
+      if (event.type === "end") {
+        this.reset();
+        return {
+          position: event.position,
+          delta: { x: 0, y: 0 },
+        };
+      }
 
-    if (this.firstEvent) {
-      delta = { x: 0, y: 0 };
-      if (event.type === "wheel" && event.delta) {
-        this.accumulatedPosition = event.delta;
+      const currentPosition = event.position || this.lastPosition;
+      let delta: Vector2D;
+
+      if (this.firstEvent) {
+        delta = { x: 0, y: 0 };
+        if (event.type === "wheel" && event.delta) {
+          this.accumulatedPosition = event.delta;
+        } else {
+          this.accumulatedPosition = currentPosition;
+        }
+        this.firstEvent = false;
+      } else if (event.type === "wheel" && event.delta) {
+        delta = event.delta;
+        this.accumulatedPosition = {
+          x: this.accumulatedPosition.x + delta.x,
+          y: this.accumulatedPosition.y + delta.y,
+        };
       } else {
+        delta = {
+          x: this.roundToFixed(currentPosition.x - this.lastPosition.x),
+          y: this.roundToFixed(currentPosition.y - this.lastPosition.y),
+        };
         this.accumulatedPosition = currentPosition;
       }
-      this.firstEvent = false;
-    } else if (event.type === "wheel" && event.delta) {
-      delta = event.delta;
-      this.accumulatedPosition = {
-        x: this.accumulatedPosition.x + delta.x,
-        y: this.accumulatedPosition.y + delta.y,
-      };
-    } else {
-      delta = {
-        x: this.roundToFixed(currentPosition.x - this.lastPosition.x),
-        y: this.roundToFixed(currentPosition.y - this.lastPosition.y),
-      };
-      this.accumulatedPosition = currentPosition;
-    }
 
-    // Check if movement is significant
-    const hasSignificantMovement =
-      Math.abs(delta.x) > this.MOVEMENT_THRESHOLD ||
-      Math.abs(delta.y) > this.MOVEMENT_THRESHOLD;
+      // Check if movement is significant
+      const hasSignificantMovement =
+        Math.abs(delta.x) > this.MOVEMENT_THRESHOLD ||
+        Math.abs(delta.y) > this.MOVEMENT_THRESHOLD;
 
-    if (hasSignificantMovement) {
-      delta = {
-        x: delta.x * 0.7,
-        y: delta.y * 0.7,
-      };
-      this.lastMovementTime = event.timestamp;
-    } else if (
-      event.timestamp - this.lastMovementTime >
-      this.MOVEMENT_TIMEOUT
-    ) {
-      // If no significant movement for a while, zero out all movement values
-      delta = { x: 0, y: 0 };
-      // Also update the last position to current to prevent residual movement
+      if (hasSignificantMovement) {
+        delta = {
+          x: delta.x * 0.7,
+          y: delta.y * 0.7,
+        };
+        this.lastMovementTime = event.timestamp;
+      } else if (
+        event.timestamp - this.lastMovementTime >
+        this.MOVEMENT_TIMEOUT
+      ) {
+        // If no significant movement for a while, zero out all movement values
+        delta = { x: 0, y: 0 };
+        // Also update the last position to current to prevent residual movement
+        this.lastPosition = currentPosition;
+        return {
+          position: this.accumulatedPosition,
+          delta: { x: 0, y: 0 },
+        };
+      }
+
       this.lastPosition = currentPosition;
+
       return {
         position: this.accumulatedPosition,
+        delta: {
+          x: this.roundToFixed(delta.x),
+          y: this.roundToFixed(delta.y),
+        },
+      };
+    } catch (error) {
+      console.error("Error processing scroll event:", error);
+      // Return safe default values
+      return {
         delta: { x: 0, y: 0 },
+        position: { ...event.position },
       };
     }
-
-    this.lastPosition = currentPosition;
-
-    return {
-      position: this.accumulatedPosition,
-      delta: {
-        x: this.roundToFixed(delta.x),
-        y: this.roundToFixed(delta.y),
-      },
-    };
   }
 
   /**
