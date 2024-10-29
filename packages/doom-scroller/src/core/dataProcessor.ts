@@ -1,5 +1,37 @@
+/**
+ * @fileoverview DataProcessor module for handling scroll, touch, and mouse event data processing
+ * @module core/dataProcessor
+ */
+
 import type { Vector2D } from "../types";
 import type { ScrollEventData } from "../types/events";
+
+/**
+ * Configuration options for movement processing
+ *
+ * @typedef {Object} MovementConfig
+ * @property {number} [threshold] - Minimum threshold for considering movement significant
+ * @property {number} [samples] - Number of samples to use for movement calculations
+ * @property {Object} [smoothing] - Smoothing configuration for movement
+ * @property {boolean} [smoothing.active] - Whether smoothing is enabled
+ * @property {number} [smoothing.factor] - Smoothing factor between 0 and 1
+ * @property {number} [smoothing.samples] - Number of samples for smoothing
+ * @property {string} [smoothing.algorithm] - Smoothing algorithm to use
+ */
+
+/**
+ * Configuration options for velocity processing
+ *
+ * @typedef {Object} VelocityConfig
+ * @property {number} [min] - Minimum velocity value
+ * @property {number} [max] - Maximum velocity value
+ * @property {string} [algorithm] - Velocity calculation algorithm
+ * @property {Object} [smoothing] - Smoothing configuration for velocity
+ * @property {boolean} [smoothing.active] - Whether smoothing is enabled
+ * @property {number} [smoothing.factor] - Smoothing factor between 0 and 1
+ * @property {number} [smoothing.samples] - Number of samples for smoothing
+ * @property {string} [smoothing.algorithm] - Smoothing algorithm to use
+ */
 
 /**
  * DataProcessor class for processing raw scroll event data
@@ -17,6 +49,20 @@ import type { ScrollEventData } from "../types/events";
  * - Maintains internal state for continuous tracking
  * - Handles edge cases and initial events gracefully
  * - Provides smooth transition between different input methods
+ *
+ * Processing Pipeline:
+ * 1. Event Reception: Receives raw event data from various input sources
+ * 2. Type Normalization: Converts different event types into a standard format
+ * 3. Delta Calculation: Computes movement deltas based on event type
+ * 4. Movement Thresholding: Applies significance thresholds to movements
+ * 5. State Management: Updates internal state for continuous tracking
+ * 6. Output Generation: Produces normalized position and delta values
+ *
+ * Performance Characteristics:
+ * - O(1) time complexity for event processing
+ * - Constant memory usage regardless of event frequency
+ * - Minimal garbage collection impact
+ * - Thread-safe state management
  *
  * @example
  * ```typescript
@@ -37,6 +83,10 @@ import type { ScrollEventData } from "../types/events";
  *   position: { x: 150, y: 150 }
  * });
  * ```
+ *
+ * @see {@link EventHandler} for event capture and normalization
+ * @see {@link VelocityCalculator} for velocity computation
+ * @see {@link SmoothingEngine} for movement smoothing
  */
 export class DataProcessor {
   /**

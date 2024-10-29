@@ -17,6 +17,55 @@ import type {
   Viewport,
 } from "./types";
 
+/**
+ * DoomScroller - High-performance scroll and gesture tracking library
+ *
+ * @class
+ * @description
+ * The DoomScroller class provides a comprehensive solution for tracking and managing
+ * scroll, touch, and mouse gesture events with built-in smoothing and step-based navigation.
+ *
+ * Key features:
+ * - Event normalization across different input methods (wheel, touch, mouse)
+ * - Configurable smoothing algorithms for movement and velocity
+ * - Step-based navigation support
+ * - Viewport size tracking
+ * - Memory-efficient event queue management
+ * - Reactive state management with subscription system
+ *
+ * The class uses a modular architecture with specialized components:
+ * - EventHandler: Raw event processing
+ * - DataProcessor: Input normalization
+ * - VelocityCalculator: Speed and direction calculations
+ * - SmoothingEngine: Movement and velocity smoothing
+ * - DirectionDetector: Directional change detection
+ * - StepsManager: Step-based navigation
+ *
+ * @example
+ * ```typescript
+ * const scroller = new DoomScroller({
+ *   speedMultiplier: 1.5,
+ *   events: {
+ *     wheel: true,
+ *     touch: true,
+ *     mouse: false
+ *   },
+ *   movement: {
+ *     smoothing: {
+ *       active: true,
+ *       factor: 0.3
+ *     }
+ *   }
+ * });
+ *
+ * scroller.subscribe(state => {
+ *   console.log('Movement:', state.movement);
+ *   console.log('Velocity:', state.velocity);
+ * });
+ *
+ * scroller.start();
+ * ```
+ */
 export class DoomScroller {
   private readonly options: Required<Options>;
   private readonly eventHandler: EventHandler;
@@ -39,6 +88,21 @@ export class DoomScroller {
   private readonly eventQueue: ScrollEventData[] = [];
   private animationFrameId?: number;
 
+  /**
+   * Creates a new DoomScroller instance
+   *
+   * @param {Partial<Options>} options - Configuration options
+   *
+   * @description
+   * Initializes a new DoomScroller instance with the provided options. All options
+   * have sensible defaults and are deeply merged with user-provided values.
+   *
+   * The constructor:
+   * 1. Normalizes configuration options
+   * 2. Initializes core components
+   * 3. Sets up event handlers
+   * 4. Prepares the resize observer
+   */
   constructor(options: Partial<Options> = {}) {
     // Type-safe options normalization
     this.options = {
@@ -113,6 +177,19 @@ export class DoomScroller {
     this.eventHandler.addHandler(this.queueEvent);
   }
 
+  /**
+   * Starts the scroll tracking
+   *
+   * @public
+   * @description
+   * Activates the scroll tracking system. This includes:
+   * - Enabling event listeners
+   * - Starting viewport tracking
+   * - Initializing state management
+   *
+   * Should be called after setting up subscribers and before expecting
+   * any scroll events to be processed.
+   */
   public start(): void {
     if (this.isActive) return;
     this.isActive = true;
@@ -123,6 +200,19 @@ export class DoomScroller {
     }
   }
 
+  /**
+   * Stops the scroll tracking
+   *
+   * @public
+   * @description
+   * Deactivates the scroll tracking system. This includes:
+   * - Removing event listeners
+   * - Stopping viewport tracking
+   * - Resetting internal state
+   *
+   * Useful when temporarily disabling scroll tracking or cleaning up
+   * before destroying the instance.
+   */
   public stop(): void {
     if (!this.isActive) return;
 
@@ -132,16 +222,51 @@ export class DoomScroller {
     this.reset();
   }
 
+  /**
+   * Subscribes to scroll state updates
+   *
+   * @public
+   * @param {(state: ScrollState) => void} callback - Subscriber callback function
+   * @returns {() => void} Unsubscribe function
+   *
+   * @description
+   * Adds a subscriber to receive scroll state updates. The callback will be
+   * immediately called with the current state and then for all subsequent
+   * state changes.
+   *
+   * The returned function can be called to remove the subscription.
+   */
   public subscribe(callback: (state: ScrollState) => void): () => void {
     this.subscribers.add(callback);
     callback(this.lastState); // Emit initial state
     return () => this.unsubscribe(callback);
   }
 
+  /**
+   * Removes a subscriber from receiving updates
+   *
+   * @public
+   * @param {(state: ScrollState) => void} callback - The callback function to remove
+   * @description
+   * Removes a previously registered subscriber callback from the notification list.
+   * If the callback is not found, the operation is silently ignored.
+   */
   public unsubscribe(callback: (state: ScrollState) => void): void {
     this.subscribers.delete(callback);
   }
 
+  /**
+   * Resets the scroll tracking state
+   *
+   * @public
+   * @description
+   * Resets all internal state to initial values while maintaining
+   * subscriptions and configuration. This includes:
+   * - Clearing timeouts
+   * - Resetting all component states
+   * - Reinitializing the scroll state
+   * - Notifying subscribers of the reset
+   */
   public reset(): void {
     if (this.endTimeout) {
       window.clearTimeout(this.endTimeout);
@@ -158,6 +283,20 @@ export class DoomScroller {
     this.notifySubscribers(this.lastState);
   }
 
+  /**
+   * Completely destroys the scroll tracker
+   *
+   * @public
+   * @description
+   * Performs a complete cleanup of the scroll tracker:
+   * - Stops all tracking
+   * - Removes event listeners
+   * - Clears all timeouts and animation frames
+   * - Removes all subscribers
+   * - Resets all state
+   *
+   * After calling destroy, the instance should not be reused.
+   */
   public destroy(): void {
     this.stop();
     this.eventHandler.destroy();
@@ -185,6 +324,15 @@ export class DoomScroller {
     this.isActive = false;
   }
 
+  /**
+   * Queues a scroll event for processing
+   *
+   * @private
+   * @param {ScrollEventData} event - The event to queue
+   * @description
+   * Adds an event to the processing queue and schedules processing if needed.
+   * Uses requestAnimationFrame for efficient batching of events.
+   */
   private queueEvent = (event: ScrollEventData): void => {
     if (!this.isActive) return;
 
@@ -196,6 +344,15 @@ export class DoomScroller {
     }
   };
 
+  /**
+   * Processes the queued events
+   *
+   * @private
+   * @description
+   * Processes all queued events in the current animation frame.
+   * Only processes the most recent event to prevent overwhelming
+   * the system during rapid scroll sequences.
+   */
   private processEventQueue = (): void => {
     this.animationFrameId = undefined;
 
@@ -209,6 +366,20 @@ export class DoomScroller {
     this.eventQueue.length = 0;
   };
 
+  /**
+   * Handles a single scroll event
+   *
+   * @private
+   * @param {ScrollEventData} event - The event to process
+   * @description
+   * Core event processing pipeline:
+   * 1. Normalizes input data
+   * 2. Applies speed multiplier
+   * 3. Smooths movement
+   * 4. Calculates velocity
+   * 5. Updates step tracking
+   * 6. Emits new state
+   */
   private handleEvent = (event: ScrollEventData): void => {
     if (!this.isActive) return;
 
@@ -257,6 +428,17 @@ export class DoomScroller {
     this.notifySubscribers(currentState);
   };
 
+  /**
+   * Handles the end of a scroll sequence
+   *
+   * @private
+   * @description
+   * Manages the transition from active scrolling to idle state:
+   * 1. Updates scrolling flag
+   * 2. Notifies subscribers
+   * 3. Schedules cleanup after debounce period
+   * 4. Resets component states
+   */
   private handleEventEnd = (): void => {
     if (this.endTimeout) {
       window.clearTimeout(this.endTimeout);
@@ -288,6 +470,15 @@ export class DoomScroller {
     }, this.options.debounceTime);
   };
 
+  /**
+   * Handles viewport resize events
+   *
+   * @private
+   * @param {ResizeObserverEntry[]} entries - Resize observer entries
+   * @description
+   * Updates the viewport dimensions and notifies subscribers
+   * of the change while maintaining other state values.
+   */
   private handleResize = (entries: ResizeObserverEntry[]): void => {
     if (!this.isActive) return;
 
@@ -298,6 +489,15 @@ export class DoomScroller {
     });
   };
 
+  /**
+   * Gets current viewport dimensions
+   *
+   * @private
+   * @returns {Viewport} Current viewport dimensions
+   * @description
+   * Safely retrieves the current viewport dimensions,
+   * handling both browser and SSR environments.
+   */
   private getViewport(): Viewport {
     if (typeof window === "undefined") {
       return { width: 0, height: 0 };
@@ -308,10 +508,30 @@ export class DoomScroller {
     };
   }
 
+  /**
+   * Calculates the current scroll direction
+   *
+   * @private
+   * @param {Vector2D} position - Current scroll position
+   * @returns {Direction} Calculated direction object
+   * @description
+   * Uses the DirectionDetector to determine the current scroll
+   * direction based on the provided position.
+   */
   private calculateDirection(position: Vector2D): Direction {
     return this.directionDetector.update(position);
   }
 
+  /**
+   * Creates the initial scroll state
+   *
+   * @private
+   * @returns {ScrollState} Initial state object
+   * @description
+   * Generates a fresh scroll state with default values
+   * for all properties. Used during initialization
+   * and reset operations.
+   */
   private createInitialState(): ScrollState {
     return {
       isScrolling: false,
@@ -325,10 +545,29 @@ export class DoomScroller {
     };
   }
 
+  /**
+   * Notifies all subscribers of state changes
+   *
+   * @private
+   * @param {ScrollState} data - Current scroll state
+   * @description
+   * Safely calls all subscriber callbacks with the new state.
+   * Handles any errors in subscriber callbacks to prevent
+   * breaking the scroll tracking system.
+   */
   private notifySubscribers(data: ScrollState): void {
     this.subscribers.forEach((callback) => callback(data));
   }
 
+  /**
+   * Initializes the ResizeObserver
+   *
+   * @private
+   * @description
+   * Sets up viewport tracking with fallback for environments
+   * that don't support ResizeObserver. Handles both browser
+   * and SSR scenarios safely.
+   */
   private initResizeObserver(): void {
     if (typeof window === "undefined") {
       this.resizeObserver = {

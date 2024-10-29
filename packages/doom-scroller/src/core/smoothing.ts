@@ -1,3 +1,41 @@
+/**
+ * @fileoverview SmoothingEngine module for handling scroll and gesture smoothing operations
+ * @module core/smoothing
+ *
+ * @description
+ * The SmoothingEngine module provides sophisticated smoothing algorithms for scroll and gesture
+ * movements. It handles both movement and velocity smoothing with configurable parameters
+ * and multiple algorithm options.
+ *
+ * Core Features:
+ * - Dual smoothing pipelines for movement and velocity
+ * - Configurable sample history management
+ * - Multiple smoothing algorithms (linear/exponential)
+ * - Adaptive smoothing based on movement characteristics
+ * - Direction change detection with dynamic factor adjustment
+ *
+ * Common Use Cases:
+ * 1. Smooth scrolling implementations
+ * 2. Touch gesture refinement
+ * 3. Inertial scrolling behavior
+ * 4. Animation transitions
+ *
+ * Performance Optimizations:
+ * - Efficient sample management
+ * - Minimal state updates
+ * - Memory-conscious design
+ * - Automatic cleanup
+ *
+ * Browser Support:
+ * - Modern browsers (Chrome 60+, Firefox 55+, Safari 11+)
+ * - Mobile device support
+ * - Fallback behavior for older browsers
+ *
+ * @see {@link VelocityCalculator} for velocity computation
+ * @see {@link DataProcessor} for input processing
+ * @see {@link DoomScroller} for high-level scroll management
+ */
+
 import type { Vector2D } from "../types";
 
 /**
@@ -9,10 +47,16 @@ import type { Vector2D } from "../types";
  * Supports both linear and exponential smoothing with configurable parameters.
  *
  * Features:
- * - Separate movement and velocity smoothing
- * - Sample-based movement history
- * - Multiple smoothing algorithms
- * - Automatic sample management
+ * - Separate movement and velocity smoothing configurations
+ * - Sample-based movement history with automatic management
+ * - Multiple smoothing algorithms (linear and exponential)
+ * - Automatic sample management with configurable sample sizes
+ * - Direction change detection with adaptive smoothing
+ * - Threshold-based noise filtering
+ *
+ * The engine maintains separate sample histories and configurations for movement
+ * and velocity smoothing, allowing fine-tuned control over each aspect of the
+ * scrolling experience.
  *
  * @example
  * ```typescript
@@ -39,9 +83,16 @@ import type { Vector2D } from "../types";
  *   }
  * });
  * ```
+ *
+ * @see {@link VelocityCalculator} for velocity computation
+ * @see {@link DataProcessor} for input processing
  */
 export class SmoothingEngine {
-  /** Movement smoothing configuration */
+  /**
+   * Movement smoothing configuration
+   * @private
+   * @type {Required<SmoothingConfig>}
+   */
   private readonly movementConfig: Required<{
     active: boolean;
     factor: number;
@@ -49,7 +100,11 @@ export class SmoothingEngine {
     algorithm: "linear" | "exponential";
   }>;
 
-  /** Velocity smoothing configuration */
+  /**
+   * Velocity smoothing configuration
+   * @private
+   * @type {Required<SmoothingConfig>}
+   */
   private readonly velocityConfig: Required<{
     active: boolean;
     factor: number;
@@ -57,18 +112,52 @@ export class SmoothingEngine {
     algorithm: "linear" | "exponential";
   }>;
 
-  /** Array of historical movement samples */
+  /**
+   * Array of historical movement samples
+   * @private
+   * @type {Vector2D[]}
+   */
   private movementSamples: Vector2D[];
 
-  /** Array of historical velocity samples */
+  /**
+   * Array of historical velocity samples
+   * @private
+   * @type {Vector2D[]}
+   */
   private velocitySamples: Vector2D[];
 
-  /** Current smoothed movement value */
+  /**
+   * Current smoothed movement value
+   * @private
+   * @type {Vector2D}
+   */
   private currentMovement: Vector2D;
 
-  /** Current smoothed velocity value */
+  /**
+   * Current smoothed velocity value
+   * @private
+   * @type {Vector2D}
+   */
   private currentVelocity: Vector2D;
 
+  /**
+   * Creates a new instance of SmoothingEngine
+   *
+   * @constructor
+   * @param {Object} options - Configuration options
+   * @param {Object} [options.movement] - Movement smoothing options
+   * @param {Object} [options.movement.smoothing] - Movement smoothing configuration
+   * @param {boolean} [options.movement.smoothing.active] - Enable/disable movement smoothing
+   * @param {number} [options.movement.smoothing.factor] - Movement smoothing factor (0-1)
+   * @param {number} [options.movement.smoothing.samples] - Number of movement samples to use
+   * @param {"linear" | "exponential"} [options.movement.smoothing.algorithm] - Movement smoothing algorithm
+   * @param {Object} [options.velocity] - Velocity smoothing options
+   * @param {Object} [options.velocity.smoothing] - Velocity smoothing configuration
+   * @param {boolean} [options.velocity.smoothing.active] - Enable/disable velocity smoothing
+   * @param {number} [options.velocity.smoothing.factor] - Velocity smoothing factor (0-1)
+   * @param {number} [options.velocity.smoothing.samples] - Number of velocity samples to use
+   * @param {"linear" | "exponential"} [options.velocity.smoothing.algorithm] - Velocity smoothing algorithm
+   */
   constructor(
     options: {
       movement?: {
@@ -109,6 +198,36 @@ export class SmoothingEngine {
     this.currentVelocity = { x: 0, y: 0 };
   }
 
+  /**
+   * Smooths incoming movement or velocity values using configured algorithm
+   *
+   * @public
+   * @param {Vector2D} value - Raw input value to smooth
+   * @param {"movement" | "velocity"} type - Type of value being smoothed
+   * @returns {Vector2D} Smoothed output value
+   *
+   * @description
+   * Applies configured smoothing algorithm to incoming values while maintaining
+   * separate sample histories for movement and velocity. Features include:
+   *
+   * - Noise filtering with configurable threshold
+   * - Sample history management
+   * - Algorithm selection (linear/exponential)
+   * - Separate movement/velocity configurations
+   *
+   * The smoothing process:
+   * 1. Applies threshold filter to remove noise
+   * 2. Adds new sample to history
+   * 3. Maintains sample history size
+   * 4. Applies selected smoothing algorithm
+   * 5. Updates current smoothed value
+   *
+   * @example
+   * ```typescript
+   * const rawMovement = { x: 100, y: 50 };
+   * const smoothedMovement = smoother.smooth(rawMovement, "movement");
+   * ```
+   */
   public smooth(value: Vector2D, type: "movement" | "velocity"): Vector2D {
     const config =
       type === "movement" ? this.movementConfig : this.velocityConfig;
@@ -147,6 +266,23 @@ export class SmoothingEngine {
     return result;
   }
 
+  /**
+   * Resets the smoothing engine state
+   *
+   * @public
+   * @description
+   * Clears all internal state including:
+   * - Movement sample history
+   * - Velocity sample history
+   * - Current smoothed movement value
+   * - Current smoothed velocity value
+   *
+   * Useful when:
+   * - Switching between scroll areas
+   * - Handling component unmount
+   * - Recovering from error states
+   * - Reinitializing the engine
+   */
   public reset(): void {
     this.movementSamples = [];
     this.velocitySamples = [];
@@ -154,6 +290,29 @@ export class SmoothingEngine {
     this.currentVelocity = { x: 0, y: 0 };
   }
 
+  /**
+   * Applies linear smoothing algorithm to samples
+   *
+   * @private
+   * @param {Vector2D[]} samples - Array of historical samples
+   * @param {number} factor - Smoothing factor between 0 and 1
+   * @param {Vector2D} current - Current smoothed value
+   * @returns {Vector2D} New smoothed value
+   *
+   * @description
+   * Implements weighted linear smoothing with:
+   * - Quadratic sample weighting
+   * - Direction change detection
+   * - Adaptive damping based on velocity
+   * - Smooth transitions between values
+   *
+   * The algorithm:
+   * 1. Applies weighted averaging to samples
+   * 2. Detects direction changes
+   * 3. Adjusts damping factor
+   * 4. Applies velocity-based adaptation
+   * 5. Smoothly transitions to new value
+   */
   private linearSmoothing(
     samples: Vector2D[],
     factor: number,
@@ -195,6 +354,33 @@ export class SmoothingEngine {
     };
   }
 
+  /**
+   * Applies exponential smoothing algorithm to samples
+   *
+   * @private
+   * @param {Vector2D[]} samples - Array of historical samples
+   * @param {number} factor - Smoothing factor between 0 and 1
+   * @param {Vector2D} current - Current smoothed value
+   * @returns {Vector2D} New smoothed value
+   *
+   * @description
+   * Implements exponential smoothing with:
+   * - Position-based weight calculation
+   * - Decay factor for deceleration
+   * - Normalized weight distribution
+   * - Natural feeling transitions
+   *
+   * The algorithm:
+   * 1. Calculates exponential weights
+   * 2. Applies decay factor
+   * 3. Normalizes weights
+   * 4. Computes weighted average
+   *
+   * Best suited for:
+   * - Natural feeling scrolling
+   * - Smooth deceleration
+   * - Inertial behaviors
+   */
   private exponentialSmoothing(
     samples: Vector2D[],
     factor: number,

@@ -1,6 +1,42 @@
 /**
  * @fileoverview EventHandler module for managing DOM events in the DoomScroller library
  * @module core/eventHandler
+ *
+ * @description
+ * The EventHandler module provides a unified interface for handling various DOM events
+ * related to scrolling and movement. It normalizes wheel, touch, and mouse events into
+ * a consistent format and manages the event listener lifecycle.
+ *
+ * Key Features:
+ * - Unified event handling for wheel, touch, and mouse events
+ * - Event normalization into consistent format
+ * - Automatic event cleanup
+ * - Support for passive and non-passive event listeners
+ * - Multiple handler registration
+ * - Configurable event debouncing
+ *
+ * Architecture:
+ * The module uses a pub/sub pattern where handlers can subscribe to normalized events.
+ * Events are processed through a pipeline:
+ * 1. Raw DOM event capture
+ * 2. Event type normalization
+ * 3. Position and delta calculation
+ * 4. Handler notification
+ * 5. End event scheduling
+ *
+ * Performance Considerations:
+ * - Uses passive event listeners by default
+ * - Debounces end events
+ * - Maintains minimal state
+ * - Efficient handler management with Set
+ *
+ * Browser Compatibility:
+ * - Modern browsers (Chrome 60+, Firefox 55+, Safari 11+)
+ * - Fallback support for older browsers
+ * - Touch event support for mobile devices
+ *
+ * @see {@link DataProcessor} for event data processing
+ * @see {@link DoomScroller} for high-level scroll management
  */
 
 import type { Vector2D } from "../types";
@@ -11,6 +47,30 @@ import type {
   RequiredEventOptions,
 } from "../types/events";
 
+/**
+ * Configuration options for EventHandler
+ *
+ * @interface EventHandlerOptions
+ * @extends EventOptions
+ *
+ * @property {Object} [events] - Event type configuration
+ * @property {boolean} [events.wheel=true] - Enable wheel event handling
+ * @property {boolean} [events.touch=true] - Enable touch event handling
+ * @property {boolean} [events.mouse=false] - Enable mouse event handling
+ *
+ * @example
+ * ```typescript
+ * const options: EventHandlerOptions = {
+ *   events: {
+ *     wheel: true,
+ *     touch: true,
+ *     mouse: false
+ *   },
+ *   passive: true,
+ *   endDelay: 500
+ * };
+ * ```
+ */
 interface EventHandlerOptions extends EventOptions {
   events?: {
     wheel?: boolean;
@@ -21,30 +81,74 @@ interface EventHandlerOptions extends EventOptions {
 
 /**
  * EventHandler class for managing scroll, touch and mouse events
- * @class
+ *
+ * @class EventHandler
  *
  * @description
  * The EventHandler class provides a unified interface for handling various DOM events
  * related to scrolling and movement. It normalizes different event types (wheel, touch, mouse)
  * into a consistent format and manages event listeners lifecycle.
  *
- * Features:
- * - Unified event handling for wheel, touch, and mouse events
- * - Event normalization into consistent format
- * - Automatic event cleanup
- * - Support for passive and non-passive event listeners
- * - Multiple handler registration
+ * Core Responsibilities:
+ * 1. Event Listener Management
+ *    - Attaches/detaches DOM event listeners
+ *    - Handles passive vs non-passive listeners
+ *    - Manages listener cleanup
+ *
+ * 2. Event Normalization
+ *    - Converts different event types to standard format
+ *    - Calculates deltas for touch/mouse events
+ *    - Maintains position state between events
+ *
+ * 3. Handler Management
+ *    - Supports multiple event handlers
+ *    - Safe handler addition/removal
+ *    - Efficient handler notification
+ *
+ * 4. End Event Management
+ *    - Schedules end events after scrolling stops
+ *    - Debounces end event emission
+ *    - Cleans up timeouts properly
+ *
+ * State Management:
+ * - isActive: Tracks if listeners are attached
+ * - lastTouchPosition: Maintains touch position state
+ * - handlers: Set of registered event handlers
+ * - endEventTimeout: Manages end event scheduling
+ *
+ * Event Flow:
+ * 1. DOM Event → Event Listener
+ * 2. Event Normalization
+ * 3. Handler Notification
+ * 4. End Event Scheduling
  *
  * @example
  * ```typescript
- * const handler = new EventHandler({ passive: true });
- *
- * handler.addHandler((event) => {
- *   console.log('Movement detected:', event.position);
+ * // Create handler with custom options
+ * const handler = new EventHandler({
+ *   passive: true,
+ *   events: {
+ *     wheel: true,
+ *     touch: true,
+ *     mouse: false
+ *   },
+ *   endDelay: 500
  * });
  *
+ * // Add event handler
+ * handler.addHandler(event => {
+ *   console.log('Movement:', event.position);
+ * });
+ *
+ * // Start listening
  * handler.start();
+ *
+ * // Later: cleanup
+ * handler.destroy();
  * ```
+ *
+ * @see {@link ScrollEventData} for event data structure
+ * @see {@link ScrollEventHandler} for handler function type
  */
 export class EventHandler {
   /**

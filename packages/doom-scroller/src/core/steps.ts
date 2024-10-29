@@ -1,25 +1,80 @@
-import type { Vector2D, Step } from "../types";
-
 /**
- * StepsManager class for managing scroll steps and snapping behavior
+ * @fileoverview StepsManager module for handling step-based scroll navigation
+ * @module core/steps
  *
- * @class
  * @description
- * The StepsManager provides functionality to divide scrolling into discrete steps,
- * useful for creating paginated or sectioned scroll experiences. It supports both
- * absolute and delta-based movement modes and can trigger step changes based on
- * either movement thresholds or velocity thresholds.
+ * The StepsManager module provides functionality for dividing scroll content into
+ * discrete steps or sections. This is particularly useful for:
  *
- * Features:
+ * - Creating paginated scroll experiences
+ * - Building section-based navigation
+ * - Implementing scroll snapping behavior
+ * - Managing scroll-based presentations
+ *
+ * Key Features:
  * - Viewport-based step size calculation
  * - Movement and velocity-based triggers
  * - Delta and absolute movement modes
  * - Accumulated movement tracking
  * - Step boundary calculations
  *
+ * Architecture:
+ * The module uses a state machine approach where:
+ * 1. Movement/velocity inputs are tracked
+ * 2. Thresholds are checked
+ * 3. Step changes are triggered
+ * 4. Step boundaries are calculated
+ *
+ * Performance Considerations:
+ * - Minimal state management
+ * - Efficient boundary calculations
+ * - Optimized threshold checks
+ * - Memory-efficient tracking
+ *
+ * Browser Compatibility:
+ * - Modern browsers (Chrome 60+, Firefox 55+, Safari 11+)
+ * - Fallback support for older browsers
+ * - Mobile device support
+ *
+ * @see {@link DoomScroller} for high-level scroll management
+ * @see {@link DataProcessor} for movement processing
+ * @see {@link VelocityCalculator} for velocity calculations
+ */
+
+import type { Vector2D, Step } from "../types";
+
+/**
+ * StepsManager class for managing scroll steps and snapping behavior
+ *
+ * @class StepsManager
+ * @description
+ * The StepsManager provides functionality to divide scrolling into discrete steps,
+ * useful for creating paginated or sectioned scroll experiences. It supports both
+ * absolute and delta-based movement modes and can trigger step changes based on
+ * either movement thresholds or velocity thresholds.
+ *
+ * Implementation Details:
+ * - Uses viewport height for step size calculation
+ * - Supports both movement and velocity triggers
+ * - Handles accumulated delta tracking
+ * - Manages step boundary calculations
+ * - Provides step change notifications
+ *
+ * Common Use Cases:
+ * 1. Single-page presentations
+ * 2. Section-based navigation
+ * 3. Scroll-snap containers
+ * 4. Paginated content
+ *
+ * Performance Optimizations:
+ * - Minimal state updates
+ * - Efficient threshold checks
+ * - Optimized boundary calculations
+ * - Memory-efficient tracking
+ *
  * @example
  * ```typescript
- * // Create with absolute movement mode
+ * // Basic usage with absolute movement mode
  * const manager = new StepsManager({
  *   active: true,
  *   movementMode: 'absolute',
@@ -32,7 +87,16 @@ import type { Vector2D, Step } from "../types";
  *   { x: 0, y: 500 },  // position
  *   { x: 0, y: 0.2 }   // velocity
  * );
+ *
+ * if (step) {
+ *   console.log(`Current step: ${step.index}`);
+ *   console.log(`Step boundaries: ${step.start.y} to ${step.end.y}`);
+ *   console.log(`Triggered by: ${step.trigger}`);
+ * }
  * ```
+ *
+ * @see {@link Step} for step information structure
+ * @see {@link Vector2D} for position and velocity types
  */
 export class StepsManager {
   /**
