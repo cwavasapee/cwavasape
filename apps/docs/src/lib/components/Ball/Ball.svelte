@@ -47,10 +47,7 @@
 
 		// Smooth transition between current and target size
 		currentSize += (targetSize - currentSize) * SIZE_SMOOTHING_FACTOR;
-		console.log({
-			currentSize,
-			yVelocity
-		});
+
 		return currentSize;
 	}
 
