@@ -1,33 +1,5 @@
 /**
- * @fileoverview DoomScroller - A TypeScript library for tracking scroll, touch, and mouse gestures
- * @module DoomScroller
- * @description
- * The DoomScroller class provides a comprehensive solution for tracking and managing scroll,
- * touch, and mouse gestures in web applications. It offers features like smooth animations,
- * velocity tracking, direction detection, and step-based scrolling.
- *
- * Key features:
- * - Unified event handling for wheel, touch, and mouse events
- * - Configurable smoothing and velocity calculations
- * - Direction detection with customizable thresholds
- * - Step-based scrolling support
- * - Reactive subscription system
- * - Cross-browser compatibility
- *
- * @example
- * ```typescript
- * // Initialize with default options
- * const scroller = new DoomScroller();
- *
- * // Subscribe to scroll updates
- * scroller.subscribe((state) => {
- *   console.log('Current position:', state.position);
- *   console.log('Current velocity:', state.velocity);
- * });
- *
- * // Start tracking
- * scroller.start();
- * ```
+ * @fileoverview Main entry point for the DoomScroller library
  */
 
 import { EventHandler } from "./core/eventHandler";
@@ -36,256 +8,143 @@ import { VelocityCalculator } from "./core/velocity";
 import { SmoothingEngine } from "./core/smoothing";
 import { DirectionDetector } from "./core/direction";
 import { StepsManager } from "./core/steps";
-import type { ScrollEventData, ScrollEventHandler } from "./types/events";
-import type { Options, Vector2D, Direction, ScrollState } from "./types";
+import type { ScrollEventData, ScrollEventType } from "./types/events";
+import type {
+  Options,
+  Vector2D,
+  Direction,
+  ScrollState,
+  Viewport,
+} from "./types";
 
 export class DoomScroller {
-  /**
-   * Normalized configuration options
-   * @private
-   * @readonly
-   */
   private readonly options: Required<Options>;
-
-  /**
-   * Event handling system for managing DOM events
-   * @private
-   * @readonly
-   */
   private readonly eventHandler: EventHandler;
-
-  /**
-   * Raw event data processor for normalizing input
-   * @private
-   * @readonly
-   */
   private readonly dataProcessor: DataProcessor;
-
-  /**
-   * Velocity calculation system for tracking movement speed
-   * @private
-   * @readonly
-   */
   private readonly velocityCalculator: VelocityCalculator;
-
-  /**
-   * Movement smoothing system for fluid animations
-   * @private
-   * @readonly
-   */
   private readonly smoothingEngine: SmoothingEngine;
-
-  /**
-   * Direction detection system for movement analysis
-   * @private
-   * @readonly
-   */
   private readonly directionDetector: DirectionDetector;
-
-  /**
-   * Step-based scrolling system for discrete movements
-   * @private
-   * @readonly
-   */
   private readonly stepsManager: StepsManager;
-
-  /**
-   * Set of subscriber callbacks for state updates
-   * @private
-   * @readonly
-   */
   private readonly subscribers: Set<(state: ScrollState) => void>;
+  private resizeObserver: ResizeObserver = {
+    observe: () => {},
+    unobserve: () => {},
+    disconnect: () => {},
+  } as ResizeObserver;
 
-  /**
-   * ResizeObserver instance for viewport changes
-   * @private
-   * @readonly
-   */
-  private readonly resizeObserver: ResizeObserver;
-
-  /**
-   * Current active state of the scroller
-   * @private
-   */
   private isActive: boolean = false;
-
-  /**
-   * Last emitted scroll state
-   * @private
-   */
   private lastState: ScrollState;
-
-  /**
-   * End event timeout handle
-   * @private
-   */
   private endTimeout?: number;
 
-  /**
-   * Creates a new DoomScroller instance
-   * @param {Options} [options={}] - Configuration options
-   *
-   * @example
-   * ```typescript
-   * // Create with default options
-   * const basic = new DoomScroller();
-   *
-   * // Create with custom configuration
-   * const custom = new DoomScroller({
-   *   speedMultiplier: 1.5,
-   *   smoothing: {
-   *     active: true,
-   *     factor: 0.2
-   *   },
-   *   steps: {
-   *     active: true,
-   *     movementThreshold: 100
-   *   }
-   * });
-   * ```
-   */
-  constructor(options: Options = {}) {
-    // Normalize options
+  private readonly eventQueue: ScrollEventData[] = [];
+  private animationFrameId?: number;
+
+  constructor(options: Partial<Options> = {}) {
+    // Type-safe options normalization
     this.options = {
       speedMultiplier: options.speedMultiplier ?? 1,
-      debounceTime: options.debounceTime ?? 150,
+      debounceTime: options.debounceTime ?? 500,
       events: {
         wheel: options.events?.wheel ?? true,
         touch: options.events?.touch ?? true,
         mouse: options.events?.mouse ?? false,
+        passive: options.events?.passive ?? true,
+        endDelay: options.events?.endDelay ?? 0,
       },
-      smoothing: {
-        active: options.smoothing?.active ?? true,
-        factor: options.smoothing?.factor ?? 0.2,
-        threshold: options.smoothing?.threshold ?? 0.05,
-        samples: options.smoothing?.samples ?? 5,
-        algorithm: options.smoothing?.algorithm ?? "linear",
+      movement: {
+        threshold: options.movement?.threshold ?? 0.1,
+        samples: options.movement?.samples ?? 5,
+        smoothing: {
+          active: options.movement?.smoothing?.active ?? true,
+          factor: options.movement?.smoothing?.factor ?? 0.3,
+          samples: options.movement?.smoothing?.samples ?? 5,
+          algorithm: options.movement?.smoothing?.algorithm ?? "linear",
+        },
       },
       velocity: {
         min: options.velocity?.min ?? 0,
         max: options.velocity?.max ?? 1,
         algorithm: options.velocity?.algorithm ?? "linear",
-      },
-      direction: {
-        threshold: options.direction?.threshold ?? 0.1,
-        samples: options.direction?.samples ?? 5,
+        smoothing: {
+          active: options.velocity?.smoothing?.active ?? true,
+          factor: options.velocity?.smoothing?.factor ?? 0.3,
+          samples: options.velocity?.smoothing?.samples ?? 5,
+          algorithm: options.velocity?.smoothing?.algorithm ?? "linear",
+        },
       },
       steps: {
         active: options.steps?.active ?? false,
         movementMode: options.steps?.movementMode ?? "absolute",
-        movementThreshold: options.steps?.movementThreshold ?? 0,
-        velocityThreshold: options.steps?.velocityThreshold ?? 0,
+        movementThreshold: options.steps?.movementThreshold,
+        velocityThreshold: options.steps?.velocityThreshold,
       },
       debug: options.debug ?? false,
-    };
+    } satisfies Required<Options>;
 
-    // Initialize state and subscribers
+    // Initialize state and core components
     this.lastState = this.createInitialState();
     this.subscribers = new Set();
 
+    // Initialize ResizeObserver first
+    this.initResizeObserver();
+
     // Initialize core components
     this.eventHandler = new EventHandler({
-      passive: true,
+      passive: this.options.events.passive,
       events: this.options.events,
-      endDelay: this.options.debounceTime,
+      endDelay: this.options.events.endDelay,
     });
 
     this.dataProcessor = new DataProcessor();
     this.velocityCalculator = new VelocityCalculator(this.options.velocity);
-    this.smoothingEngine = new SmoothingEngine(this.options.smoothing);
-    this.directionDetector = new DirectionDetector(this.options.direction);
+    this.smoothingEngine = new SmoothingEngine({
+      movement: { smoothing: this.options.movement.smoothing },
+      velocity: { smoothing: this.options.velocity.smoothing },
+    });
+    this.directionDetector = new DirectionDetector({
+      movement: {
+        threshold: this.options.movement.threshold,
+        samples: this.options.movement.samples,
+      },
+    });
     this.stepsManager = new StepsManager(this.options.steps);
 
     // Bind event handlers
-    this.eventHandler.addHandler(this.handleEvent);
-    this.resizeObserver = new ResizeObserver(this.handleResize);
+    this.eventHandler.addHandler(this.queueEvent);
+  }
 
-    // Start viewport observation if in browser
+  public start(): void {
+    if (this.isActive) return;
+    this.isActive = true;
+    this.eventHandler.start();
+
     if (typeof window !== "undefined") {
       this.resizeObserver.observe(document.documentElement);
     }
   }
 
-  /**
-   * Starts tracking scroll events
-   * @returns {void}
-   *
-   * @description
-   * Begins tracking scroll, touch, and mouse events based on the configured options.
-   * If the scroller is already active, this method has no effect.
-   *
-   * @example
-   * ```typescript
-   * const scroller = new DoomScroller();
-   * scroller.start(); // Begin tracking events
-   * ```
-   */
-  public start(): void {
-    if (this.isActive) return;
-    this.isActive = true;
-    this.eventHandler.start();
-  }
-
-  /**
-   * Stops tracking scroll events
-   * @returns {void}
-   *
-   * @description
-   * Stops tracking all events and cleans up internal state.
-   * The scroller can be restarted by calling start() again.
-   *
-   * @example
-   * ```typescript
-   * scroller.stop(); // Stop tracking events
-   * ```
-   */
   public stop(): void {
+    if (!this.isActive) return;
+
     this.eventHandler.stop();
     this.resizeObserver.disconnect();
     this.isActive = false;
     this.reset();
   }
 
-  /**
-   * Subscribes to scroll state updates
-   * @param {(state: ScrollState) => void} callback - Function to handle state updates
-   * @returns {() => void} Unsubscribe function
-   *
-   * @description
-   * Registers a callback function to receive scroll state updates. The callback will be
-   * called immediately with the current state and then with each subsequent update.
-   * Returns a function that can be called to unsubscribe.
-   *
-   * @example
-   * ```typescript
-   * const unsubscribe = scroller.subscribe((state) => {
-   *   console.log('Position:', state.position);
-   *   console.log('Velocity:', state.velocity);
-   * });
-   *
-   * // Later: cleanup subscription
-   * unsubscribe();
-   * ```
-   */
   public subscribe(callback: (state: ScrollState) => void): () => void {
     this.subscribers.add(callback);
     callback(this.lastState); // Emit initial state
     return () => this.unsubscribe(callback);
   }
 
-  /**
-   * Unsubscribes from scroll events
-   */
   public unsubscribe(callback: (state: ScrollState) => void): void {
     this.subscribers.delete(callback);
   }
 
-  /**
-   * Resets all internal state
-   */
   public reset(): void {
     if (this.endTimeout) {
-      clearTimeout(this.endTimeout);
+      window.clearTimeout(this.endTimeout);
       this.endTimeout = undefined;
     }
 
@@ -299,41 +158,77 @@ export class DoomScroller {
     this.notifySubscribers(this.lastState);
   }
 
-  /**
-   * Cleans up all resources
-   */
   public destroy(): void {
     this.stop();
     this.eventHandler.destroy();
+
+    if (this.endTimeout) {
+      window.clearTimeout(this.endTimeout);
+      this.endTimeout = undefined;
+    }
+
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+
     this.subscribers.clear();
     this.reset();
+
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = undefined;
+    }
+    this.eventQueue.length = 0;
+
+    // Clear references
+    this.lastState = this.createInitialState();
+    this.isActive = false;
   }
+
+  private queueEvent = (event: ScrollEventData): void => {
+    if (!this.isActive) return;
+
+    this.eventQueue.push(event);
+
+    // Only schedule processing if not already scheduled
+    if (!this.animationFrameId) {
+      this.animationFrameId = requestAnimationFrame(this.processEventQueue);
+    }
+  };
+
+  private processEventQueue = (): void => {
+    this.animationFrameId = undefined;
+
+    // Process only the most recent event for each type
+    const lastEvent = this.eventQueue[this.eventQueue.length - 1];
+    if (lastEvent) {
+      this.handleEvent(lastEvent);
+    }
+
+    // Clear the queue
+    this.eventQueue.length = 0;
+  };
 
   private handleEvent = (event: ScrollEventData): void => {
     if (!this.isActive) return;
 
-    // Handle end events
     if (event.type === "end") {
       this.handleEventEnd();
       return;
     }
 
-    // Process event data
     const { position, delta } = this.dataProcessor.process(event);
 
-    // Scale movement
     const scaledDelta: Vector2D = {
       x: delta.x * this.options.speedMultiplier,
       y: delta.y * this.options.speedMultiplier,
     };
 
-    // Apply smoothing
     const smoothedMovement = this.smoothingEngine.smooth(
       scaledDelta,
       "movement"
     );
 
-    // Calculate velocity
     const rawVelocity = this.velocityCalculator.calculate(
       smoothedMovement,
       event.timestamp
@@ -343,12 +238,10 @@ export class DoomScroller {
       "velocity"
     );
 
-    // Update steps if enabled
     const step = this.options.steps.active
       ? this.stepsManager.update(position, smoothedVelocity)
       : undefined;
 
-    // Create new state
     const currentState: ScrollState = {
       isScrolling: true,
       viewport: this.getViewport(),
@@ -356,46 +249,48 @@ export class DoomScroller {
       movement: smoothedMovement,
       velocity: smoothedVelocity,
       direction: this.calculateDirection(position),
-      step: step?.index,
+      step: step?.index ?? undefined,
       timestamp: event.timestamp,
     };
 
-    // Update and notify
     this.lastState = currentState;
     this.notifySubscribers(currentState);
   };
 
   private handleEventEnd = (): void => {
     if (this.endTimeout) {
-      clearTimeout(this.endTimeout);
+      window.clearTimeout(this.endTimeout);
+      this.endTimeout = undefined;
     }
 
-    // Update state but keep tracking active
-    this.lastState.isScrolling = false;
-    this.notifySubscribers(this.lastState);
+    const currentState = { ...this.lastState, isScrolling: false };
+    this.lastState = currentState;
+    this.notifySubscribers(currentState);
 
-    // Schedule cleanup
     this.endTimeout = window.setTimeout(() => {
-      // Reset processors
+      if (!this.isActive) return;
+
       this.dataProcessor.reset();
       this.velocityCalculator.reset();
       this.smoothingEngine.reset();
       this.directionDetector.reset();
       this.stepsManager.reset();
 
-      // Create final state
       const finalState: ScrollState = {
         ...this.createInitialState(),
-        position: this.lastState.position, // Preserve position
+        position: this.lastState.position,
+        step: this.lastState.step,
       };
 
-      // Update and notify
       this.lastState = finalState;
       this.notifySubscribers(finalState);
+      this.endTimeout = undefined;
     }, this.options.debounceTime);
   };
 
   private handleResize = (entries: ResizeObserverEntry[]): void => {
+    if (!this.isActive) return;
+
     const viewport = this.getViewport();
     this.notifySubscribers({
       ...this.lastState,
@@ -403,7 +298,10 @@ export class DoomScroller {
     });
   };
 
-  private getViewport(): { width: number; height: number } {
+  private getViewport(): Viewport {
+    if (typeof window === "undefined") {
+      return { width: 0, height: 0 };
+    }
     return {
       width: window.innerWidth,
       height: window.innerHeight,
@@ -422,6 +320,7 @@ export class DoomScroller {
       movement: { x: 0, y: 0 },
       velocity: { x: 0, y: 0 },
       direction: { x: "none", y: "none" },
+      step: undefined,
       timestamp: Date.now(),
     };
   }
@@ -429,8 +328,36 @@ export class DoomScroller {
   private notifySubscribers(data: ScrollState): void {
     this.subscribers.forEach((callback) => callback(data));
   }
+
+  private initResizeObserver(): void {
+    if (typeof window === "undefined") {
+      this.resizeObserver = {
+        observe: () => {},
+        unobserve: () => {},
+        disconnect: () => {},
+      } as ResizeObserver;
+      return;
+    }
+
+    try {
+      this.resizeObserver = new ResizeObserver(this.handleResize);
+    } catch (e) {
+      // Fallback for browsers that don't support ResizeObserver
+      this.resizeObserver = {
+        observe: () => {},
+        unobserve: () => {},
+        disconnect: () => {},
+      } as ResizeObserver;
+    }
+  }
 }
 
 // Export types
-export type { Options, ScrollState, Vector2D, Direction };
-export type { ScrollEventData, ScrollEventType } from "./types/events";
+export type {
+  Options,
+  ScrollState,
+  Vector2D,
+  Direction,
+  ScrollEventData,
+  ScrollEventType,
+};

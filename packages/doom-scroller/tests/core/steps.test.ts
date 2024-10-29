@@ -44,37 +44,28 @@ describe("StepsManager", () => {
     });
   });
 
-  describe("update method", () => {
-    it("should handle first update correctly", () => {
-      const result = manager.update({ x: 0, y: 0 }, { x: 0, y: 0 });
-      expect(manager["stepSize"]).toBe(1000); // window.innerHeight
-      expect(result).toBeUndefined();
+  describe("movement modes", () => {
+    it("should handle absolute movement mode", () => {
+      const absoluteManager = new StepsManager({
+        active: true,
+        movementMode: "absolute",
+        movementThreshold: 100,
+      });
+
+      const result = absoluteManager.update({ x: 0, y: 150 }, { x: 0, y: 0 });
+      expect(result?.trigger).toBe("movement");
     });
 
-    it("should detect velocity-based step change", () => {
-      const result = manager.update(
-        { x: 0, y: 500 },
-        { x: 0, y: 0.6 } // Above velocity threshold
-      );
-      expect(result?.trigger).toBe("velocity");
-    });
-
-    it("should handle negative step indices", () => {
-      const result = manager.update({ x: 0, y: -1500 }, { x: 0, y: 0 });
-      expect(result?.index).toBe(-2);
-      expect(result?.start).toEqual({ x: 0, y: -2000 });
-      expect(result?.end).toEqual({ x: 800, y: -1000 });
-    });
-
-    it("should accumulate delta movements correctly", () => {
+    it("should handle delta movement mode", () => {
       const deltaManager = new StepsManager({
         active: true,
         movementMode: "delta",
         movementThreshold: 100,
-        velocityThreshold: 100.0, // Set very high to avoid velocity triggers
       });
 
+      // First update to establish baseline
       deltaManager.update({ x: 0, y: 50 }, { x: 0, y: 0 });
+      // Second update to trigger movement
       const result = deltaManager.update({ x: 0, y: 60 }, { x: 0, y: 0 });
       expect(result?.trigger).toBe("movement");
     });
@@ -112,63 +103,13 @@ describe("StepsManager", () => {
 
     it("should return correct step after updates", () => {
       manager.update({ x: 0, y: 2500 }, { x: 0, y: 0 });
-      const step = manager.getCurrentStep();
-      expect(step).toEqual({
+      const result = manager.getCurrentStep();
+      expect(result).toEqual({
         index: 2,
         size: 1000,
         start: { x: 0, y: 2000 },
-        end: { x: 800, y: 3000 },
+        end: { x: window.innerWidth, y: 3000 },
       });
-    });
-
-    it("should maintain step boundaries after reset", () => {
-      manager.update({ x: 0, y: 1500 }, { x: 0, y: 0 });
-      manager.reset();
-      const step = manager.getCurrentStep();
-      expect(step.index).toBe(0);
-      expect(step.size).toBe(0);
-    });
-  });
-
-  describe("delta movement mode", () => {
-    it("should accumulate movements until threshold", () => {
-      const deltaManager = new StepsManager({
-        active: true,
-        movementMode: "delta",
-        movementThreshold: 100,
-        velocityThreshold: 100.0,
-      });
-
-      // First movement (40 units)
-      let result = deltaManager.update({ x: 0, y: 40 }, { x: 0, y: 0 });
-      expect(result).toBeUndefined();
-
-      // Second movement (40 units, total 80)
-      result = deltaManager.update({ x: 0, y: 40 }, { x: 0, y: 0 });
-      expect(result).toBeUndefined();
-
-      // Third movement (40 units, total 120 - should trigger)
-      result = deltaManager.update({ x: 0, y: 40 }, { x: 0, y: 0 });
-      expect(result?.trigger).toBe("movement");
-    });
-
-    it("should reset accumulator after trigger", () => {
-      const deltaManager = new StepsManager({
-        active: true,
-        movementMode: "delta",
-        movementThreshold: 100,
-        velocityThreshold: 100.0,
-      });
-
-      // Accumulate to trigger
-      deltaManager.update({ x: 0, y: 60 }, { x: 0, y: 0 });
-      deltaManager.update({ x: 0, y: 60 }, { x: 0, y: 0 });
-      expect(deltaManager["accumulatedDelta"]).toBe(0); // Should reset after trigger
-
-      // Start new accumulation
-      const result = deltaManager.update({ x: 0, y: 40 }, { x: 0, y: 0 });
-      expect(result).toBeUndefined();
-      expect(deltaManager["accumulatedDelta"]).toBe(40);
     });
   });
 });

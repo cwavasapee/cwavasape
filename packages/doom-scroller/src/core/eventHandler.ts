@@ -52,7 +52,7 @@ export class EventHandler {
    * @private
    * @readonly
    */
-  private readonly target: HTMLElement | Document | Window;
+  private readonly target: Window;
 
   /**
    * Set of registered event handlers
@@ -120,10 +120,9 @@ export class EventHandler {
         touch: options.events?.touch ?? true,
         mouse: options.events?.mouse ?? false,
       },
-      endDelay: options.endDelay ?? 500, // Updated from 150 to 500
+      endDelay: options.endDelay ?? 500,
     };
-    // Change this to use window directly instead of document
-    this.target = typeof window !== "undefined" ? window : ({} as Window);
+    this.target = window;
   }
 
   /**
@@ -143,7 +142,36 @@ export class EventHandler {
   public start(): void {
     if (this.isActive) return;
     this.isActive = true;
-    this.attachEvents();
+
+    if (this.options.events.wheel) {
+      this.target.addEventListener("wheel", this.handleWheel, {
+        passive: this.options.passive,
+      });
+    }
+
+    if (this.options.events.touch) {
+      this.target.addEventListener("touchstart", this.handleTouchStart, {
+        passive: this.options.passive,
+      });
+      this.target.addEventListener("touchmove", this.handleTouchMove, {
+        passive: this.options.passive,
+      });
+      this.target.addEventListener("touchend", this.handleTouchEnd, {
+        passive: this.options.passive,
+      });
+    }
+
+    if (this.options.events.mouse) {
+      this.target.addEventListener("mousedown", this.handleMouseDown, {
+        passive: this.options.passive,
+      });
+      this.target.addEventListener("mousemove", this.handleMouseMove, {
+        passive: this.options.passive,
+      });
+      this.target.addEventListener("mouseup", this.handleMouseUp, {
+        passive: this.options.passive,
+      });
+    }
   }
 
   /**
@@ -162,23 +190,16 @@ export class EventHandler {
   public stop(): void {
     if (!this.isActive) return;
 
-    // Clear any pending end event timeout
-    if (this.endEventTimeout) {
-      window.clearTimeout(this.endEventTimeout);
-      this.endEventTimeout = undefined;
-    }
-
-    this.detachEvents();
-
-    // Force an end event
-    this.emit({
-      type: "end",
-      timestamp: Date.now(),
-      position: { x: 0, y: 0 },
-      isScrolling: false,
-    });
+    this.target.removeEventListener("wheel", this.handleWheel);
+    this.target.removeEventListener("touchstart", this.handleTouchStart);
+    this.target.removeEventListener("touchmove", this.handleTouchMove);
+    this.target.removeEventListener("touchend", this.handleTouchEnd);
+    this.target.removeEventListener("mousedown", this.handleMouseDown);
+    this.target.removeEventListener("mousemove", this.handleMouseMove);
+    this.target.removeEventListener("mouseup", this.handleMouseUp);
 
     this.isActive = false;
+    this.lastTouchPosition = null;
   }
 
   /**
@@ -241,108 +262,14 @@ export class EventHandler {
     this.handlers.clear();
   }
 
-  private attachEvents(): void {
-    const listenerOptions = {
-      passive: this.options.passive,
-      capture: false,
-    };
-
-    if (this.options.events.wheel) {
-      this.target.addEventListener(
-        "wheel",
-        this.handleWheel as EventListener,
-        listenerOptions
-      );
-    }
-
-    if (this.options.events.touch) {
-      this.target.addEventListener(
-        "touchstart",
-        this.handleTouchStart as EventListener,
-        listenerOptions
-      );
-      this.target.addEventListener(
-        "touchmove",
-        this.handleTouchMove as EventListener,
-        listenerOptions
-      );
-      this.target.addEventListener(
-        "touchend",
-        this.handleTouchEnd as EventListener,
-        listenerOptions
-      );
-    }
-
-    if (this.options.events.mouse) {
-      this.target.addEventListener(
-        "mousedown",
-        this.handleMouseDown as EventListener,
-        listenerOptions
-      );
-      this.target.addEventListener(
-        "mousemove",
-        this.handleMouseMove as EventListener,
-        listenerOptions
-      );
-      this.target.addEventListener(
-        "mouseup",
-        this.handleMouseUp as EventListener,
-        listenerOptions
-      );
-    }
-  }
-
-  private detachEvents(): void {
-    // Only detach events that were potentially attached
-    if (this.options.events.wheel) {
-      this.target.removeEventListener(
-        "wheel",
-        this.handleWheel as EventListener
-      );
-    }
-
-    if (this.options.events.touch) {
-      this.target.removeEventListener(
-        "touchstart",
-        this.handleTouchStart as EventListener
-      );
-      this.target.removeEventListener(
-        "touchmove",
-        this.handleTouchMove as EventListener
-      );
-      this.target.removeEventListener(
-        "touchend",
-        this.handleTouchEnd as EventListener
-      );
-    }
-
-    if (this.options.events.mouse) {
-      this.target.removeEventListener(
-        "mousedown",
-        this.handleMouseDown as EventListener
-      );
-      this.target.removeEventListener(
-        "mousemove",
-        this.handleMouseMove as EventListener
-      );
-      this.target.removeEventListener(
-        "mouseup",
-        this.handleMouseUp as EventListener
-      );
-    }
-  }
-
   private emit(event: ScrollEventData): void {
-    // Always clear existing timeout first
     if (this.endEventTimeout) {
       window.clearTimeout(this.endEventTimeout);
       this.endEventTimeout = undefined;
     }
 
-    // Emit the current event
     this.handlers.forEach((handler) => handler(event));
 
-    // Only schedule end event for scrolling events
     if (event.isScrolling && this.isActive) {
       this.scheduleEndEvent();
     }
@@ -351,7 +278,6 @@ export class EventHandler {
   private scheduleEndEvent(): void {
     if (!this.options.endDelay || !this.isActive) return;
 
-    // Clear any existing timeout
     if (this.endEventTimeout) {
       window.clearTimeout(this.endEventTimeout);
     }
@@ -366,149 +292,103 @@ export class EventHandler {
         isScrolling: false,
       };
 
-      // Clear the timeout ID before emitting to prevent recursion
       this.endEventTimeout = undefined;
-
-      // Emit the end event directly to handlers to avoid recursion
       this.handlers.forEach((handler) => handler(endEvent));
     }, this.options.endDelay);
   }
 
-  private handleWheel = (e: WheelEvent): void => {
+  private readonly handleWheel = (e: WheelEvent) => {
     if (!this.isActive) return;
 
     if (!this.options.passive) {
       e.preventDefault();
     }
 
-    const eventData: ScrollEventData = {
+    this.emit({
       type: "wheel",
       timestamp: Date.now(),
-      position: {
-        x: e.clientX,
-        y: e.clientY,
-      },
-      delta: {
-        x: e.deltaX,
-        y: e.deltaY,
-      },
+      position: { x: e.clientX, y: e.clientY },
+      delta: { x: e.deltaX, y: e.deltaY },
       isScrolling: true,
-    };
-
-    this.emit(eventData);
+    });
   };
 
-  private handleTouchStart = (e: TouchEvent): void => {
-    if (!e.touches[0]) return;
-
+  private readonly handleTouchStart = (e: TouchEvent) => {
     const touch = e.touches[0];
-    this.lastTouchPosition = {
-      x: touch.clientX,
-      y: touch.clientY,
-    };
+    if (!touch) return;
 
-    const eventData: ScrollEventData = {
+    this.lastTouchPosition = { x: touch.clientX, y: touch.clientY };
+    this.emit({
       type: "touch",
       timestamp: Date.now(),
       position: this.lastTouchPosition,
-      delta: { x: 0, y: 0 }, // Initialize with zero delta
+      delta: { x: 0, y: 0 },
       isScrolling: true,
-    };
-
-    this.emit(eventData);
+    });
   };
 
-  private handleTouchMove = (e: TouchEvent): void => {
-    if (!e.touches[0] || !this.lastTouchPosition) return;
-
+  private readonly handleTouchMove = (e: TouchEvent) => {
     const touch = e.touches[0];
-    const currentPosition = {
-      x: touch.clientX,
-      y: touch.clientY,
-    };
+    if (!touch || !this.lastTouchPosition) return;
 
+    const currentPosition = { x: touch.clientX, y: touch.clientY };
     const delta = {
       x: currentPosition.x - this.lastTouchPosition.x,
       y: currentPosition.y - this.lastTouchPosition.y,
     };
 
-    const eventData: ScrollEventData = {
+    this.lastTouchPosition = currentPosition;
+    this.emit({
       type: "touch",
       timestamp: Date.now(),
       position: currentPosition,
-      delta: delta,
+      delta,
       isScrolling: true,
-    };
-
-    this.lastTouchPosition = currentPosition;
-    this.emit(eventData);
+    });
   };
 
-  private handleTouchEnd = (e: TouchEvent): void => {
+  private readonly handleTouchEnd = (e: TouchEvent) => {
     if (!this.lastTouchPosition) return;
 
-    // Send final event with last known position
-    const eventData: ScrollEventData = {
-      type: "end", // Change type to "end" for proper cleanup
+    this.emit({
+      type: "end",
       timestamp: Date.now(),
       position: this.lastTouchPosition,
       delta: { x: 0, y: 0 },
       isScrolling: false,
-    };
-
+    });
     this.lastTouchPosition = null;
-    this.emit(eventData);
   };
 
-  private handleMouseDown = (e: MouseEvent): void => {
-    const eventData: ScrollEventData = {
+  private readonly handleMouseDown = (e: MouseEvent) => {
+    this.emit({
       type: "mouse",
       timestamp: Date.now(),
-      position: {
-        x: e.clientX,
-        y: e.clientY,
-      },
+      position: { x: e.clientX, y: e.clientY },
       isScrolling: true,
-    };
-
-    this.emit(eventData);
+    });
   };
 
-  private handleMouseMove = (e: MouseEvent): void => {
-    const eventData: ScrollEventData = {
+  private readonly handleMouseMove = (e: MouseEvent) => {
+    this.emit({
       type: "mouse",
       timestamp: Date.now(),
-      position: {
-        x: e.clientX,
-        y: e.clientY,
-      },
+      position: { x: e.clientX, y: e.clientY },
       isScrolling: true,
-    };
-
-    this.emit(eventData);
+    });
   };
 
-  private handleMouseUp = (e: MouseEvent): void => {
-    const eventData: ScrollEventData = {
+  private readonly handleMouseUp = (e: MouseEvent) => {
+    this.emit({
       type: "mouse",
       timestamp: Date.now(),
-      position: {
-        x: e.clientX,
-        y: e.clientY,
-      },
+      position: { x: e.clientX, y: e.clientY },
       isScrolling: false,
-    };
-
-    this.emit(eventData);
+    });
   };
 
   public updateConfig(options: EventHandlerOptions): void {
-    const wasActive = this.isActive;
-
-    if (wasActive) {
-      this.detachEvents();
-    }
-
+    this.stop();
     this.options = {
       passive: options.passive ?? this.options.passive,
       events: {
@@ -518,10 +398,8 @@ export class EventHandler {
       },
       endDelay: options.endDelay ?? this.options.endDelay,
     };
-
-    if (wasActive) {
-      this.attachEvents();
-      this.isActive = true;
+    if (this.isActive) {
+      this.start();
     }
   }
 }

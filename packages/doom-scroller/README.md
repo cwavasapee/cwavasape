@@ -58,10 +58,12 @@ scroller.subscribe((data) => {
 
 ```typescript
 const scroller = new DoomScroller({
-  smoothing: {
-    active: true,
-    factor: 0.1,
-    algorithm: "exponential",
+  movement: {
+    smoothing: {
+      active: true,
+      factor: 0.1,
+      algorithm: "exponential",
+    },
   },
 });
 
@@ -120,6 +122,27 @@ scroller.subscribe((data) => {
 });
 ```
 
+### Specific Smoothing Algorithm
+
+```typescript
+const scroller = new DoomScroller({
+  movement: {
+    smoothing: {
+      active: true,
+      factor: 0.3,
+      algorithm: "exponential",
+    },
+  },
+  velocity: {
+    smoothing: {
+      active: true,
+      factor: 0.2,
+      algorithm: "linear",
+    },
+  },
+});
+```
+
 ## Event Types
 
 DoomScroller supports three main types of events:
@@ -133,10 +156,10 @@ DoomScroller supports three main types of events:
 ### Input Options
 
 ```typescript
-type Options = {
+interface Options {
   /** Multiplier for scroll speed (default: 1) */
   speedMultiplier?: number;
-  /** Time in ms to wait before considering scroll ended (default: 200) */
+  /** Time in ms to wait before considering scroll ended (default: 500) */
   debounceTime?: number;
   /** Event handling configuration */
   events?: {
@@ -148,21 +171,28 @@ type Options = {
     mouse?: boolean;
     /** Enable passive event listeners (default: true) */
     passive?: boolean;
+    /** Delay before considering scroll ended (default: 0) */
+    endDelay?: number;
   };
-  /** Movement smoothing configuration */
-  smoothing?: {
-    /** Enable smoothing (default: true) */
-    active?: boolean;
-    /** Smoothing factor between 0 and 1 (default: 0.3) */
-    factor?: number;
-    /** Minimum movement threshold (default: 0.1) */
+  /** Movement configuration */
+  movement?: {
+    /** Direction change threshold (default: 0.1) */
     threshold?: number;
-    /** Number of samples for smoothing calculation (default: 5) */
+    /** Number of samples for direction detection (default: 5) */
     samples?: number;
-    /** Smoothing algorithm selection (default: "linear") */
-    algorithm?: "linear" | "exponential";
+    /** Movement smoothing configuration */
+    smoothing?: {
+      /** Enable smoothing (default: true) */
+      active?: boolean;
+      /** Smoothing factor between 0 and 1 (default: 0.3) */
+      factor?: number;
+      /** Number of samples for smoothing calculation (default: 5) */
+      samples?: number;
+      /** Smoothing algorithm selection (default: "linear") */
+      algorithm?: "linear" | "exponential";
+    };
   };
-  /** Velocity calculation configuration */
+  /** Velocity configuration */
   velocity?: {
     /** Minimum velocity value (default: 0) */
     min?: number;
@@ -170,13 +200,17 @@ type Options = {
     max?: number;
     /** Velocity calculation algorithm (default: "linear") */
     algorithm?: "linear" | "exponential";
-  };
-  /** Direction detection configuration */
-  direction?: {
-    /** Direction change threshold (default: 0.1) */
-    threshold?: number;
-    /** Number of samples for direction detection (default: 5) */
-    samples?: number;
+    /** Velocity smoothing configuration */
+    smoothing?: {
+      /** Enable smoothing (default: true) */
+      active?: boolean;
+      /** Smoothing factor between 0 and 1 (default: 0.3) */
+      factor?: number;
+      /** Number of samples for smoothing calculation (default: 5) */
+      samples?: number;
+      /** Smoothing algorithm selection (default: "linear") */
+      algorithm?: "linear" | "exponential";
+    };
   };
   /** Step detection configuration */
   steps?: {
@@ -191,7 +225,7 @@ type Options = {
   };
   /** Enable debug logging (default: false) */
   debug?: boolean;
-};
+}
 ```
 
 ### Scroll State Data
@@ -201,7 +235,10 @@ interface ScrollState {
   /** Whether scrolling is currently active */
   isScrolling: boolean;
   /** Current viewport dimensions */
-  viewport: Vector2D;
+  viewport: {
+    width: number;
+    height: number;
+  };
   /** Current absolute position */
   position: Vector2D;
   /** Movement delta since last update */
@@ -210,37 +247,20 @@ interface ScrollState {
   velocity: Vector2D;
   /** Current movement direction */
   direction: Direction;
-  /** Current step information (if steps enabled) */
-  step?: Step;
+  /** Current step index (if steps enabled) */
+  step?: number;
   /** Timestamp of the last update */
   timestamp: number;
 }
 
 interface Vector2D {
-  /** X-axis coordinate or value */
   x: number;
-  /** Y-axis coordinate or value */
   y: number;
 }
 
 interface Direction {
-  /** X-axis direction: left, right, or none */
   x: "left" | "right" | "none";
-  /** Y-axis direction: up, down, or none */
   y: "up" | "down" | "none";
-}
-
-interface Step {
-  /** Step index number */
-  index: number;
-  /** Size of the step in pixels */
-  size?: number;
-  /** Starting coordinates of the step */
-  start?: Vector2D;
-  /** Ending coordinates of the step */
-  end?: Vector2D;
-  /** What triggered the step change */
-  trigger?: "movement" | "velocity";
 }
 ```
 

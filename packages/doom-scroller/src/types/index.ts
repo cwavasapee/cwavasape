@@ -1,9 +1,6 @@
 /**
  * @fileoverview Core type definitions for the DoomScroller library
  * @module types
- * @description
- * This module contains all the core type definitions used throughout the DoomScroller library.
- * It defines interfaces for vectors, directions, configuration options, steps, and output data.
  */
 
 /**
@@ -89,20 +86,25 @@ export interface Options {
     /** Delay before considering scroll ended (default: 0) */
     endDelay?: number;
   };
-  /** Movement smoothing configuration */
-  smoothing?: {
-    /** Enable smoothing (default: true) */
-    active?: boolean;
-    /** Smoothing factor between 0 and 1 (default: 0.3) */
-    factor?: number;
-    /** Minimum movement threshold (default: 0.1) */
+  /** Movement configuration */
+  movement?: {
+    /** Direction change threshold (default: 0.1) */
     threshold?: number;
-    /** Number of samples for smoothing calculation (default: 5) */
+    /** Number of samples for direction detection (default: 5) */
     samples?: number;
-    /** Smoothing algorithm selection (default: "linear") */
-    algorithm?: "linear" | "exponential";
+    /** Movement smoothing configuration */
+    smoothing?: {
+      /** Enable smoothing (default: true) */
+      active?: boolean;
+      /** Smoothing factor between 0 and 1 (default: 0.3) */
+      factor?: number;
+      /** Number of samples for smoothing calculation (default: 5) */
+      samples?: number;
+      /** Smoothing algorithm selection (default: "linear") */
+      algorithm?: "linear" | "exponential";
+    };
   };
-  /** Velocity calculation configuration */
+  /** Velocity configuration */
   velocity?: {
     /** Minimum velocity value (default: 0) */
     min?: number;
@@ -110,13 +112,17 @@ export interface Options {
     max?: number;
     /** Velocity calculation algorithm (default: "linear") */
     algorithm?: "linear" | "exponential";
-  };
-  /** Direction detection configuration */
-  direction?: {
-    /** Direction change threshold (default: 0.1) */
-    threshold?: number;
-    /** Number of samples for direction detection (default: 5) */
-    samples?: number;
+    /** Velocity smoothing configuration */
+    smoothing?: {
+      /** Enable smoothing (default: true) */
+      active?: boolean;
+      /** Smoothing factor between 0 and 1 (default: 0.3) */
+      factor?: number;
+      /** Number of samples for smoothing calculation (default: 5) */
+      samples?: number;
+      /** Smoothing algorithm selection (default: "linear") */
+      algorithm?: "linear" | "exponential";
+    };
   };
   /** Step detection configuration */
   steps?: {
@@ -206,6 +212,11 @@ export interface ScrollState {
   step?: number;
   /** Timestamp of the last update */
   timestamp: number;
+}
+
+export interface Viewport {
+  width: number;
+  height: number;
 }
 
 // Re-export event types

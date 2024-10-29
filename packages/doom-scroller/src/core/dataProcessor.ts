@@ -79,7 +79,7 @@ export class DataProcessor {
    * Used to determine if movement is significant
    * @private
    */
-  private readonly MOVEMENT_THRESHOLD = 0.2; // Increased from 0.001 to better handle small movements
+  private MOVEMENT_THRESHOLD = 0.2; // Increased from 0.001 to better handle small movements
 
   /**
    * Creates a new DataProcessor instance
@@ -91,7 +91,33 @@ export class DataProcessor {
    * - First event flag set to true
    * - No accumulated delta values
    */
-  constructor() {
+  constructor(config?: {
+    movement?: {
+      threshold?: number;
+      samples?: number;
+      smoothing?: {
+        active?: boolean;
+        factor?: number;
+        samples?: number;
+        algorithm?: string;
+      };
+    };
+    velocity?: {
+      min?: number;
+      max?: number;
+      algorithm?: string;
+      smoothing?: {
+        active?: boolean;
+        factor?: number;
+        samples?: number;
+        algorithm?: string;
+      };
+    };
+  }) {
+    // Apply threshold from config if provided
+    if (config?.movement?.threshold !== undefined) {
+      this.MOVEMENT_THRESHOLD = config.movement.threshold;
+    }
     this.reset();
   }
 
@@ -189,6 +215,10 @@ export class DataProcessor {
       Math.abs(delta.y) > this.MOVEMENT_THRESHOLD;
 
     if (hasSignificantMovement) {
+      delta = {
+        x: delta.x * 0.7,
+        y: delta.y * 0.7,
+      };
       this.lastMovementTime = event.timestamp;
     } else if (
       event.timestamp - this.lastMovementTime >

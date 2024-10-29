@@ -29,21 +29,24 @@ export class DirectionDetector {
   /**
    * Creates a new DirectionDetector instance
    * @param options - Configuration options
-   * @param [options.threshold=0.1] - Minimum movement threshold to trigger direction change
-   * @param [options.samples=5] - Maximum number of samples to store for detection
+   * @param [options.movement] - Movement configuration
+   * @param [options.movement.threshold=0.1] - Minimum movement threshold to trigger direction change
+   * @param [options.movement.samples=5] - Maximum number of samples to store for detection
    *
    * @throws {Error} If threshold is negative
    * @throws {Error} If samples is less than 2
    */
   constructor(
     options: {
-      threshold?: number;
-      samples?: number;
+      movement?: {
+        threshold?: number;
+        samples?: number;
+      };
     } = {}
   ) {
     this.samples = [];
-    this.maxSamples = options.samples ?? 5;
-    this.threshold = options.threshold ?? 0.1;
+    this.maxSamples = options.movement?.samples ?? 5;
+    this.threshold = options.movement?.threshold ?? 0.1;
     this.lastDirection = { x: "none", y: "none" };
   }
 
@@ -104,13 +107,27 @@ export class DirectionDetector {
     const deltaX = latest.x - oldest.x;
     const deltaY = latest.y - oldest.y;
 
+    // Check if the last few samples are identical (stationary)
+    const isStationary = this.samples
+      .slice(-3)
+      .every(
+        (sample) =>
+          Math.abs(sample.x - latest.x) < this.threshold &&
+          Math.abs(sample.y - latest.y) < this.threshold
+      );
+
+    if (isStationary) {
+      this.lastDirection = { x: "none", y: "none" };
+      return this.lastDirection;
+    }
+
     const direction: Direction = {
       x:
         Math.abs(deltaX) < this.threshold
           ? "none"
           : deltaX > 0
-          ? "right"
-          : "left",
+            ? "right"
+            : "left",
       y:
         Math.abs(deltaY) < this.threshold ? "none" : deltaY > 0 ? "down" : "up",
     };

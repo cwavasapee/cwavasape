@@ -167,13 +167,28 @@ export class StepsManager {
       this.stepSize = window.innerHeight;
     }
 
-    // Calculate velocity magnitude
-    const velocityMagnitude = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+    // Check movement threshold first
+    let trigger: "movement" | "velocity" | undefined;
 
-    // Handle delta mode accumulation
     if (this.movementMode === "delta") {
-      // Accumulate the absolute value of the movement
       this.accumulatedDelta += Math.abs(position.y);
+      if (this.accumulatedDelta >= this.movementThreshold) {
+        trigger = "movement";
+        this.accumulatedDelta = 0;
+      }
+    } else {
+      const absoluteMovement = Math.abs(position.y - this.lastPosition.y);
+      if (absoluteMovement >= this.movementThreshold) {
+        trigger = "movement";
+      }
+    }
+
+    // Only check velocity if movement threshold wasn't met
+    if (!trigger) {
+      const velocityMagnitude = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+      if (velocityMagnitude >= this.velocityThreshold) {
+        trigger = "velocity";
+      }
     }
 
     // Calculate effective position
@@ -187,29 +202,6 @@ export class StepsManager {
 
     // Calculate new step
     const newStep = Math.floor(effectivePosition.y / this.stepSize);
-
-    // Determine trigger
-    let trigger: "movement" | "velocity" | undefined;
-
-    // Check velocity first
-    if (velocityMagnitude >= this.velocityThreshold) {
-      trigger = "velocity";
-    }
-    // Then check movement based on mode
-    else if (this.movementMode === "delta") {
-      if (this.accumulatedDelta >= this.movementThreshold) {
-        trigger = "movement";
-        // Only reset accumulator when we actually trigger
-        this.accumulatedDelta = 0;
-      }
-    } else {
-      const absoluteMovement = Math.abs(
-        effectivePosition.y - this.lastPosition.y
-      );
-      if (absoluteMovement >= this.movementThreshold) {
-        trigger = "movement";
-      }
-    }
 
     // Store current position
     this.lastPosition = effectivePosition;
