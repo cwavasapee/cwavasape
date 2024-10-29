@@ -13,10 +13,13 @@
 	let isMoving = $state(false);
 	let scroller: DoomScroller | undefined = $state(undefined);
 
-	const BALL_SIZE = 50;
-	const BALL_COLOR = '#ff3e00';
-	const GLOW_COLOR = 'rgba(255, 62, 0, 0.6)';
+	const BASE_COLOR = { r: 255, g: 62, b: 0 }; // Original color in RGB
+	const BASE_BALL_SIZE = 50;
+
 	const VELOCITY_THRESHOLD = 0.01;
+
+	let currentSize = $state(BASE_BALL_SIZE);
+	const SIZE_SMOOTHING_FACTOR = 0.15;
 
 	$effect(() => {
 		if (canvas) {
@@ -26,27 +29,63 @@
 		}
 	});
 
+	function getColorFromVelocity(xVelocity: number): string {
+		// Now we know xVelocity is always positive, simplify the normalization
+		const normalizedVel = Math.min(xVelocity, 2) / 2;
+
+		// Interpolate between base color and a different hue
+		const r = BASE_COLOR.r * (1 - normalizedVel) + 0 * normalizedVel;
+		const g = BASE_COLOR.g * (1 - normalizedVel) + 150 * normalizedVel;
+		const b = BASE_COLOR.b * (1 - normalizedVel) + 255 * normalizedVel;
+
+		return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+	}
+
+	function getBallSize(yVelocity: number): number {
+		const normalizedVel = Math.min(yVelocity, 2) / 4;
+		const targetSize = BASE_BALL_SIZE * (0.8 + normalizedVel * 0.4);
+
+		// Smooth transition between current and target size
+		currentSize += (targetSize - currentSize) * SIZE_SMOOTHING_FACTOR;
+		console.log({
+			currentSize,
+			yVelocity
+		});
+		return currentSize;
+	}
+
 	function drawBall() {
 		if (!ctx) return;
 
-		// Clear canvas
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-		// Calculate ball scale based on velocity
-		const scale = isMoving ? 1 + Math.min(0.3, Math.abs(velocity.x) + Math.abs(velocity.y)) : 1;
-		const scaledSize = BALL_SIZE * scale;
+		const velocityMagnitude = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+		const dynamicColor = getColorFromVelocity(velocity.x);
+		const dynamicSize = getBallSize(velocity.y);
 
-		// Update glow effect
-		ctx.shadowBlur = isMoving ? 20 : 0;
-		ctx.shadowColor = GLOW_COLOR;
+		// Scale based on overall velocity for squash effect
+		const scale = isMoving ? 1 + Math.min(0.3, velocityMagnitude) : 1;
+		const deformationX = isMoving ? velocity.x * 0.2 : 0;
+		const deformationY = isMoving ? velocity.y * 0.2 : 0;
 
-		// Draw ball using position deltas
+		// Update glow effect based on velocity
+		ctx.shadowBlur = isMoving ? 20 * velocityMagnitude : 0;
+		ctx.shadowColor = `rgba(${BASE_COLOR.r}, ${BASE_COLOR.g}, ${BASE_COLOR.b}, 0.6)`;
+
 		const centerX = canvas.width / 2 + position.x;
 		const centerY = canvas.height / 2 + position.y;
 
 		ctx.beginPath();
-		ctx.fillStyle = BALL_COLOR;
-		ctx.arc(centerX, centerY, scaledSize / 2, 0, Math.PI * 2);
+		ctx.fillStyle = dynamicColor;
+		ctx.ellipse(
+			centerX,
+			centerY,
+			(dynamicSize * scale) / 2 + deformationX,
+			(dynamicSize * scale) / 2 + deformationY,
+			Math.atan2(velocity.y, velocity.x),
+			0,
+			Math.PI * 2
+		);
 		ctx.fill();
 		ctx.closePath();
 	}
@@ -61,14 +100,31 @@
 		ctx = canvas.getContext('2d');
 
 		scroller = new DoomScroller({
-			debounceTime: 150,
-			smoothing: {
+			steps: {
 				active: false
 			},
 			events: {
 				wheel: true,
 				touch: true,
-				mouse: false
+				mouse: false,
+				passive: true,
+				endDelay: 50
+			},
+			movement: {
+				smoothing: {
+					active: false,
+					factor: 0.2,
+					algorithm: 'linear'
+				}
+			},
+			velocity: {
+				min: 0,
+				max: 2,
+				algorithm: 'linear',
+				smoothing: {
+					active: true,
+					factor: 0.5
+				}
 			}
 		});
 
@@ -80,16 +136,24 @@
 				position.y += data.movement.y;
 			}
 
-			// Constrain position
-			const maxX = (canvas.width - BALL_SIZE) / 2;
-			const maxY = (canvas.height - BALL_SIZE) / 2;
-			position.x = Math.max(-maxX, Math.min(position.x, maxX));
-			position.y = Math.max(-maxY, Math.min(position.y, maxY));
+			// Simplified boundary checks since we're using absolute values
+			const maxX = (canvas.width - BASE_BALL_SIZE) / 2;
+			const maxY = (canvas.height - BASE_BALL_SIZE) / 2;
+			const bounceElasticity = 0.5;
+
+			// Use Math.abs for position checks
+			if (Math.abs(position.x) > maxX) {
+				position.x = Math.sign(position.x) * maxX;
+				// No need to flip velocity since it's handled by the library
+			}
+
+			if (Math.abs(position.y) > maxY) {
+				position.y = Math.sign(position.y) * maxY;
+				// No need to flip velocity since it's handled by the library
+			}
 
 			velocity = data.velocity;
-			isMoving =
-				Math.abs(data.velocity.x) > VELOCITY_THRESHOLD ||
-				Math.abs(data.velocity.y) > VELOCITY_THRESHOLD;
+			isMoving = velocity.x > VELOCITY_THRESHOLD || velocity.y > VELOCITY_THRESHOLD;
 
 			drawBall();
 		});
@@ -108,7 +172,7 @@
 </script>
 
 <div class="relative h-screen w-screen">
-	<canvas class="absolute inset-0 touch-none overscroll-none" bind:this={canvas}></canvas>
+	<canvas class="absolute inset-0 touch-none overscroll-none" bind:this={canvas}> </canvas>
 	<div class="font-system fixed bottom-8 left-1/2 -translate-x-1/2 text-center opacity-70">
 		<p>Scroll or swipe to move the ball</p>
 	</div>

@@ -126,7 +126,7 @@ export class VelocityCalculator {
    * Calculates instantaneous velocity based on movement delta and time difference.
    * The calculation process:
    * 1. Sanitizes input values (handles NaN/Infinity)
-   * 2. Calculates raw velocity (pixels per millisecond)
+   * 2. Calculates raw velocity (absolute pixels per millisecond)
    * 3. Applies selected algorithm (linear/exponential)
    * 4. Clamps results within configured bounds
    *
@@ -147,35 +147,33 @@ export class VelocityCalculator {
    * ```
    */
   public calculate(delta: Vector2D, timestamp: number): Vector2D {
-    // Handle NaN and Infinity in input delta
-    const sanitizedDelta = {
-      x: Number.isFinite(delta.x) ? delta.x : 0,
-      y: Number.isFinite(delta.y) ? delta.y : 0,
-    };
-
     if (this.lastTimestamp === 0) {
       this.lastTimestamp = timestamp;
-      this.lastPosition = sanitizedDelta;
+      this.lastPosition = delta;
       return { x: 0, y: 0 };
     }
 
     const timeDelta = timestamp - this.lastTimestamp;
     if (timeDelta === 0) return this.currentVelocity;
 
-    // Calculate raw velocity (pixels per millisecond)
+    const deltaX = delta.x - this.lastPosition.x;
+    const deltaY = delta.y - this.lastPosition.y;
+
+    const timeScale = Math.min(1, Math.sqrt(16 / Math.max(timeDelta, 1)));
+    const dampingFactor = 1 / (1 + timeDelta * 0.001);
+
     const rawVelocity = {
-      x: sanitizedDelta.x / timeDelta,
-      y: sanitizedDelta.y / timeDelta,
+      x: (deltaX / Math.max(timeDelta, 1)) * timeScale * dampingFactor * 60,
+      y: (deltaY / Math.max(timeDelta, 1)) * timeScale * dampingFactor * 60,
     };
 
-    // Apply selected algorithm
     this.currentVelocity =
       this.algorithm === "linear"
         ? this.linearVelocity(rawVelocity)
         : this.exponentialVelocity(rawVelocity);
 
     this.lastTimestamp = timestamp;
-    this.lastPosition = sanitizedDelta;
+    this.lastPosition = delta;
 
     return this.currentVelocity;
   }
@@ -236,17 +234,9 @@ export class VelocityCalculator {
    * ```
    */
   private linearVelocity(velocity: Vector2D): Vector2D {
-    // Add a minimum velocity preservation to prevent too rapid decay
-    const preservationFactor = 0.2; // Maintains some minimal velocity
-    const raw = {
-      x: velocity.x + this.currentVelocity.x * preservationFactor,
-      y: velocity.y + this.currentVelocity.y * preservationFactor,
-    };
-
-    // Enforce bounds
     return {
-      x: this.clampWithSign(raw.x),
-      y: this.clampWithSign(raw.y),
+      x: this.clamp(Math.abs(velocity.x)),
+      y: this.clamp(Math.abs(velocity.y)),
     };
   }
 
@@ -273,17 +263,9 @@ export class VelocityCalculator {
    * ```
    */
   private exponentialVelocity(velocity: Vector2D): Vector2D {
-    // Adjust exponential scaling to be less aggressive
-    const scaleFactor = 0.8; // Reduced from 1.0
-    const raw = {
-      x: Math.pow(Math.abs(velocity.x), scaleFactor) * Math.sign(velocity.x),
-      y: Math.pow(Math.abs(velocity.y), scaleFactor) * Math.sign(velocity.y),
-    };
-
-    // Enforce bounds
     return {
-      x: this.clampWithSign(raw.x),
-      y: this.clampWithSign(raw.y),
+      x: this.clamp(Math.pow(Math.abs(velocity.x), 1.5)),
+      y: this.clamp(Math.pow(Math.abs(velocity.y), 1.5)),
     };
   }
 
@@ -312,21 +294,27 @@ export class VelocityCalculator {
    * }
    * ```
    */
-  private clampWithSign(value: number): number {
-    const sign = Math.sign(value);
-    const absValue = Math.abs(value);
-
-    // First enforce minimum bounds
-    if (absValue < this.minVelocity) {
-      // If very close to zero, allow decay
-      if (absValue < this.minVelocity * 0.1) {
-        return 0;
-      }
-      // Otherwise enforce minimum
-      return sign * this.minVelocity;
+  private clamp(value: number): number {
+    if (!Number.isFinite(value)) {
+      if (Number.isNaN(value)) return 0;
+      return this.maxVelocity;
     }
 
-    // Then enforce maximum bounds
-    return sign * Math.min(this.maxVelocity, absValue);
+    const absValue = Math.abs(value);
+
+    if (absValue < 0.0005) {
+      return 0;
+    }
+
+    if (this.minVelocity > 0 && absValue > 0) {
+      if (absValue < this.minVelocity * 0.25) {
+        return 0;
+      }
+      if (absValue < this.minVelocity) {
+        return this.minVelocity;
+      }
+    }
+
+    return Math.min(absValue, this.maxVelocity);
   }
 }
